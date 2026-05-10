@@ -80,20 +80,20 @@ def require_auth(handler):
     return wrapper
 
 # ── SVG icon library ──────────────────────────────────────────────────────────
-def _icon(name: str, size: int = 20, cls: str = "") -> str:
+def _icon(name: str, size: int = 20, cls: str = "", bg_color: str = None) -> str:
     cls_attr = f' class="{cls}"' if cls else ""
     icons = {
-        # File types
-        "folder":       '<path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "file":         '<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "image":        '<path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "video":        '<path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "audio":        '<path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "pdf":          '<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke="#e53e3e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "zip":          '<path d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "doc":          '<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke="#3182ce" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "sheet":        '<path d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-3.75.125v-15.375C2.25 2.004 2.754 1.5 3.375 1.5h15.75c.621 0 1.125.504 1.125 1.125v15.375m-19.5 0v-15.375m0 0c0-.621.504-1.125 1.125-1.125h15.75c.621 0 1.125.504 1.125 1.125m-19.5 0v.375A1.125 1.125 0 003.375 3h17.25c.621 0 1.125.504 1.125 1.125v15" stroke="#38a169" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "code":         '<path d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+        # File types - white icons only (background added separately)
+        "folder":       '<path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "file":         '<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "image":        '<path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "video":        '<path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "audio":        '<path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "pdf":          '<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "zip":          '<path d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "doc":          '<path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "sheet":        '<path d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-3.75.125v-15.375C2.25 2.004 2.754 1.5 3.375 1.5h15.75c.621 0 1.125.504 1.125 1.125v15.375m-19.5 0v-15.375m0 0c0-.621.504-1.125 1.125-1.125h15.75c.621 0 1.125.504 1.125 1.125m-19.5 0v.375A1.125 1.125 0 003.375 3h17.25c.621 0 1.125.504 1.125 1.125v15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        "code":         '<path d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
 
         # Navigation
         "drive":        '<path d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -101,7 +101,7 @@ def _icon(name: str, size: int = 20, cls: str = "") -> str:
         "search":       '<path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
         "menu":         '<path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
         "back":         '<path d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-        "chevron_right":'<path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+        "chevron_right":'<path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
         "plus":         '<path d="M12 4.5v15m7.5-7.5h-15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
         "close":        '<path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
         "refresh":      '<path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -127,21 +127,26 @@ def _icon(name: str, size: int = 20, cls: str = "") -> str:
         "link":         '<path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     }
     path = icons.get(name, icons["file"])
-    return f'<svg{cls_attr} width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">{path}</svg>'
+    svg = f'<svg{cls_attr} width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">{path}</svg>'
+    # If bg_color specified, wrap in a styled div with circular background
+    if bg_color:
+        return f'<div class="icon-bg" style="background-color:{bg_color}">{svg}</div>'
+    return svg
 
 def _file_icon(mime: str, size: int = 20) -> str:
-    if not mime: return _icon("file", size)
-    if "folder" in mime: return _icon("folder", size, "ico-folder")
-    if "image" in mime: return _icon("image", size, "ico-image")
-    if "video" in mime: return _icon("video", size, "ico-video")
-    if "audio" in mime: return _icon("audio", size, "ico-audio")
-    if "pdf" in mime: return _icon("pdf", size)
-    if "zip" in mime or "tar" in mime or "rar" in mime or "7z" in mime: return _icon("zip", size, "ico-zip")
-    if "word" in mime or "document" in mime: return _icon("doc", size)
-    if "sheet" in mime or "excel" in mime: return _icon("sheet", size)
-    if "presentation" in mime or "powerpoint" in mime: return _icon("sheet", size)
-    if "javascript" in mime or "json" in mime or "python" in mime or "html" in mime or "css" in mime: return _icon("code", size, "ico-code")
-    return _icon("file", size)
+    # Material Design Android file manager style colors
+    if not mime: return _icon("file", size, "", "#607d8b")  # Gray for unknown
+    if "folder" in mime: return _icon("folder", size, "", "#0386c3")  # Blue
+    if "image" in mime: return _icon("image", size, "", "#a78bfa")  # Purple (no background for images)
+    if "video" in mime: return _icon("video", size, "", "#f87171")  # Red (no background for videos)
+    if "audio" in mime: return _icon("audio", size, "", "#e55835")  # Orange-red
+    if "pdf" in mime: return _icon("pdf", size, "", "#e53e3e")  # Red (no background)
+    if "zip" in mime or "tar" in mime or "rar" in mime or "7z" in mime: return _icon("zip", size, "", "#795547")  # Brown
+    if "word" in mime or "document" in mime: return _icon("doc", size, "", "#3f51b5")  # Deep blue
+    if "sheet" in mime or "excel" in mime: return _icon("sheet", size, "", "#38a169")  # Green (no background)
+    if "presentation" in mime or "powerpoint" in mime: return _icon("sheet", size, "", "#38a169")  # Green (no background)
+    if "javascript" in mime or "json" in mime or "python" in mime or "html" in mime or "css" in mime: return _icon("code", size, "", "#60a5fa")  # Blue (no background)
+    return _icon("file", size, "", "#607d8b")  # Gray for unknown
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 _CSS = """
@@ -169,7 +174,7 @@ _CSS = """
   --r8: 8px;
   --r12: 12px;
   --r16: 16px;
-  --sans: 'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --sans: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --shadow: 0 8px 32px rgba(0,0,0,.6);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -185,13 +190,13 @@ a { color: var(--accent); text-decoration: none; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-/* Icon colors */
-.ico-folder { color: var(--folder); }
-.ico-image  { color: #a78bfa; }
-.ico-video  { color: #f87171; }
-.ico-audio  { color: #34d399; }
-.ico-zip    { color: var(--yellow); }
-.ico-code   { color: #60a5fa; }
+/* Icon colors - now using circular backgrounds instead */
+.ico-folder { color: white; }
+.ico-image  { color: white; }
+.ico-video  { color: white; }
+.ico-audio  { color: white; }
+.ico-zip    { color: white; }
+.ico-code   { color: white; }
 
 /* Progress bar */
 #bar {
@@ -251,30 +256,55 @@ input::placeholder { color: var(--text3); }
 
 /* Nav / Header */
 nav {
-  background: var(--header); border-bottom: 1px solid var(--border);
+  background: #171717;
   padding: 0 14px; display: flex; align-items: center; gap: 10px;
   height: 58px; position: sticky; top: 0; z-index: 200;
 }
 .nav-logo {
-  display: flex; align-items: center; gap: 9px;
-  font-size: 17px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center;
   text-decoration: none; flex-shrink: 0;
 }
 .nav-logo-icon { color: var(--accent); }
-.nav-spacer { flex: 1; }
+.nav-logo-img {
+  height: 36px; width: 36px; object-fit: contain;
+  display: block; border-radius: 8px;
+}
+.nav-center { flex: 1; display: flex; justify-content: center; padding: 0 8px; }
+.nav-search-wrap {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 24px; padding: 0 14px; height: 38px;
+  width: 100%; max-width: 420px;
+  transition: background .18s, border-color .18s, box-shadow .18s;
+}
+.nav-search-wrap:focus-within {
+  background: rgba(255,255,255,0.11);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.nav-search-wrap svg { color: var(--text3); flex-shrink: 0; }
+#nav-search-input {
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 14px; font-family: var(--sans);
+  width: 100%; padding: 0; box-shadow: none;
+}
+#nav-search-input::placeholder { color: var(--text3); }
 .nav-avatar {
   width: 36px; height: 36px; border-radius: 50%;
   background: var(--accent); color: #fff; display: flex;
   align-items: center; justify-content: center; font-size: 15px;
-  font-weight: 700; flex-shrink: 0; overflow: hidden;
+  font-weight: 700; flex-shrink: 0; overflow: hidden; cursor: pointer;
 }
 .nav-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.nav-avatar { cursor: pointer; }
 
 /* Avatar popup */
 #av-popup {
   display: none; position: fixed; top: 62px; right: 12px; z-index: 900;
-  background: var(--surface); border: 1px solid var(--border2);
+  background: rgba(26,26,26,0.82);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.09);
   border-radius: var(--r16); padding: 20px; width: 290px;
   box-shadow: 0 12px 48px rgba(0,0,0,.7);
   animation: mIn .18s ease;
@@ -313,19 +343,20 @@ nav {
 /* Toolbar / Breadcrumb bar */
 .toolbar {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-  background: var(--header); border-bottom: 1px solid var(--border);
+  background: #171717;
   flex-shrink: 0; min-height: 52px;
 }
-.breadcrumb { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
+.breadcrumb { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; }
+.breadcrumb::-webkit-scrollbar { display: none; }
 .bc-crumb {
   color: var(--text2); cursor: pointer; padding: 5px 8px; border-radius: var(--r4);
-  font-size: 15px; white-space: nowrap; max-width: 160px;
-  overflow: hidden; text-overflow: ellipsis; transition: all .1s;
+  font-size: 15px; text-transform: uppercase; white-space: nowrap;
+  transition: all .1s; flex-shrink: 0;
 }
 .bc-crumb:hover { background: var(--surface2); color: var(--text); }
-.bc-crumb.last { color: var(--text); cursor: default; font-weight: 600; }
+.bc-crumb.last { color: var(--accent); cursor: default; font-weight: 600; }
 .bc-crumb.last:hover { background: transparent; }
-.bc-sep { color: var(--text3); flex-shrink: 0; }
+.bc-sep { color: var(--text3); flex-shrink: 0; font-size: 25px; }
 
 /* Layout */
 .layout { display: flex; height: calc(100vh - 58px); overflow: hidden; }
@@ -372,8 +403,8 @@ nav {
 
 /* File item row — mobile-first card style */
 .file-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 13px 14px; border-bottom: 1px solid rgba(44,44,44,.6);
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 12px; border-bottom: 0.9px solid rgba(44,44,44,.6);
   cursor: pointer; transition: background .08s; position: relative;
   user-select: none; -webkit-user-select: none;
 }
@@ -393,16 +424,35 @@ nav {
 body.select-mode .fi-cb { display: flex; }
 
 /* File icon */
-.fi-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; }
+.fi-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; }
+
+/* Circular icon background (Android Material Design style) */
+.icon-bg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+
+.icon-bg svg {
+  width: 24px;
+  height: 24px;
+  color: white;
+  stroke: white;
+}
 
 /* File info */
 .fi-info { flex: 1; min-width: 0; overflow: hidden; }
 .fi-name {
-  font-size: 16px; font-weight: 500; color: var(--text);
+  font-size: 16px; font-weight: 400; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   line-height: 1.3;
 }
-.fi-name.fol { color: var(--text); font-weight: 600; }
+.fi-name.fol { color: var(--text); font-weight: 400; }
 .fi-meta {
   display: flex; justify-content: space-between; align-items: center;
   margin-top: 3px; width: 100%;
@@ -438,6 +488,12 @@ body.select-mode .fi-cb { display: flex; }
 .sk-s { height: 12px; width: 30%; }
 .sk-i { height: 28px; width: 28px; border-radius: var(--r4); flex-shrink: 0; }
 
+/* Accent color swatches */
+.ac-sw { transition: transform .15s, box-shadow .15s, border .15s; }
+.ac-sw:hover { transform: scale(1.18); }
+.ac-sw:active { transform: scale(.93); }
+.ac-sw-on { transform: scale(1.1); }
+
 /* Scroll sentinel spinner */
 #scroll-spinner { padding: 16px; justify-content: center; }
 
@@ -450,7 +506,7 @@ body.select-mode .fi-cb { display: flex; }
 body.select-mode #fab { bottom: 96px; }
 .fab-main {
   width: 58px; height: 58px; border-radius: 50%;
-  background: var(--fab); color: #000; border: none;
+  background: var(--fab); color: #fff; border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; box-shadow: 0 4px 20px rgba(255,178,0,.4);
   transition: all .2s; font-size: 28px; font-weight: 300;
@@ -486,6 +542,7 @@ body.select-mode #fab { bottom: 96px; }
   max-width: calc(100vw - 32px);
 }
 #selbar.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+#selbar.above-modal { z-index: 1100; }
 #selcnt { font-size: 13px; color: var(--text2); padding: 0 4px; white-space: nowrap; }
 .selbar-sep { width: 1px; height: 22px; background: var(--border2); margin: 0 2px; flex-shrink: 0; }
 .sel-btn {
@@ -508,38 +565,39 @@ body.select-mode #fab { bottom: 96px; }
 .moverlay {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.75); backdrop-filter: blur(6px);
-  z-index: 1000; align-items: flex-end; justify-content: center;
+  z-index: 1000; align-items: center; justify-content: center;
+  padding: 16px;
 }
 .moverlay.open { display: flex; }
 .modal {
   background: var(--surface); border: 1px solid var(--border2);
-  border-radius: var(--r16) var(--r16) 0 0; padding: 24px; width: 100%;
-  max-width: 540px; box-shadow: var(--shadow); animation: mIn .22s ease;
-  max-height: 92vh; overflow-y: auto;
+  border-radius: var(--r16); padding: 22px 20px; width: 100%;
+  max-width: 420px; box-shadow: var(--shadow); animation: mIn .2s ease;
+  max-height: 88vh; overflow-y: auto;
 }
-@keyframes mIn { from { transform: translateY(30px); opacity: 0; } }
+@keyframes mIn { from { transform: scale(.95) translateY(-8px); opacity: 0; } }
 .modal-title {
-  font-size: 17px; font-weight: 700; margin-bottom: 20px;
-  display: flex; align-items: center; gap: 10px; color: var(--text);
+  font-size: 16px; font-weight: 700; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 9px; color: var(--text);
 }
-.fg { margin-bottom: 16px; }
-.fg label { display: block; font-size: 12px; color: var(--text3); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
-.macts { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.fg { margin-bottom: 14px; }
+.fg label { display: block; font-size: 11px; color: var(--text3); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.macts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
 /* Upload dropzone */
 .dropzone {
-  border: 2px dashed var(--border2); border-radius: var(--r12); padding: 32px 20px;
+  border: 2px dashed var(--border2); border-radius: var(--r12); padding: 24px 16px;
   text-align: center; color: var(--text3); cursor: pointer; transition: all .18s; position: relative;
 }
 .dropzone:hover, .dropzone.dragover {
   border-color: var(--accent); color: var(--accent); background: var(--accent-dim);
 }
 .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
-.dz-icon { margin: 0 auto 10px; }
-.dz-txt { font-size: 16px; font-weight: 600; margin-top: 4px; }
-.dz-hint { font-size: 12px; margin-top: 6px; opacity: .7; }
-.ulist { margin-top: 12px; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
-.uitem { padding: 10px 12px; background: var(--surface2); border-radius: var(--r8); font-size: 13px; }
+.dz-icon { margin: 0 auto 8px; }
+.dz-txt { font-size: 15px; font-weight: 600; margin-top: 2px; }
+.dz-hint { font-size: 12px; margin-top: 4px; opacity: .7; }
+.ulist { margin-top: 10px; max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.uitem { padding: 9px 11px; background: var(--surface2); border-radius: var(--r8); font-size: 13px; }
 .uitem-top { display: flex; align-items: center; gap: 10px; }
 .uname { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ust { color: var(--text3); white-space: nowrap; }
@@ -556,14 +614,24 @@ body.select-mode #fab { bottom: 96px; }
 .fti:hover { background: var(--surface2); }
 .fti.sel { background: var(--accent-dim); color: var(--accent); }
 
-/* Search results */
+/* Search results — match file manager style */
 .sri {
-  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
-  cursor: pointer; font-size: 14px; border-bottom: 1px solid rgba(44,44,44,.4);
-  transition: background .09s;
+  display: flex; align-items: center; gap: 14px; padding: 10px 12px;
+  cursor: pointer; border-bottom: 0.9px solid rgba(44,44,44,.6);
+  transition: background .08s; position: relative; user-select: none;
+  -webkit-user-select: none;
 }
-.sri:hover { background: var(--surface2); }
-.sri-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sri:last-child { border-bottom: none; }
+.sri:active { background: var(--surface2); }
+.sri.sri-sel { background: rgba(4,131,195,.1); }
+.sri-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; }
+.sri-info { flex: 1; min-width: 0; overflow: hidden; }
+.sri-name { font-size: 15px; font-weight: 400; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.sri-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; }
+.sri-size { font-size: 12px; color: var(--text3); }
+.sri-date { font-size: 12px; color: var(--text3); margin-left: auto; padding-left: 8px; white-space: nowrap; }
+
+
 
 /* Login */
 .lp { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -620,19 +688,14 @@ body.select-mode #fab { bottom: 96px; }
 /* Responsive */
 @media (max-width: 640px) {
   .sidebar { display: none; }
-  nav { padding: 0 12px; }
+  nav { padding: 0 10px; gap: 6px; }
+  .nav-search-wrap { max-width: 100%; }
   .toolbar { padding: 8px 12px; }
-  .modal { border-radius: var(--r16) var(--r16) 0 0; }
   .fab-main { width: 54px; height: 54px; }
   #selbar { padding: 8px 10px; gap: 2px; }
   .sel-btn { padding: 5px 6px; }
   .sel-btn span { display: none; }
-}
-
-/* Desktop tweaks */
-@media (min-width: 641px) {
-  .moverlay { align-items: center; }
-  .modal { border-radius: var(--r16); max-height: 85vh; }
+  .moverlay { padding: 12px; }
 }
 """
 
@@ -648,10 +711,24 @@ function bar(on) {
   if (!on) setTimeout(() => b.className = '', 800);
 }
 function openModal(id) { document.getElementById('m-' + id).classList.add('open'); }
-function closeModal(id) { document.getElementById('m-' + id).classList.remove('open'); }
+function closeModal(id) {
+  document.getElementById('m-' + id).classList.remove('open');
+  if (id !== 'search') {
+    const sm = document.getElementById('m-search');
+    if (sm && sm.classList.contains('open')) sm.style.zIndex = '';
+  }
+}
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.moverlay').forEach(el =>
-    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); })
+    el.addEventListener('click', e => {
+      if (e.target === el) {
+        el.classList.remove('open');
+        if (el.id !== 'm-search') {
+          const sm = document.getElementById('m-search');
+          if (sm && sm.classList.contains('open')) sm.style.zIndex = '';
+        }
+      }
+    })
   );
   // Boot: trigger initial file load after all JS functions are defined
   if (typeof navRoot === 'function') navRoot();
@@ -665,9 +742,12 @@ def _page(body: str, title: str = "Drive") -> web.Response:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>{title} — GDrive Bot</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="shortcut icon" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <style>{_CSS}</style>
 </head><body>
 <div id="bar"></div>
@@ -706,7 +786,7 @@ async def handle_login(request: web.Request) -> web.Response:
 <div class="lp">
   <div class="lcard">
     <div class="llogo">
-      <div class="llogo-icon">{_icon("drive", 52)}</div>
+      <div class="llogo-icon"><img src="/static/logo.png" style="width:80px;height:80px;object-fit:contain;border-radius:16px" alt="GDrive Bot"></div>
       <h1>GDrive Bot</h1>
       <p>Sign in to access your files</p>
     </div>
@@ -720,7 +800,7 @@ async def handle_login(request: web.Request) -> web.Response:
         {_icon("login_arrow",18)} Sign In
       </button>
     </form>
-    <p class="lhint">Set password via Telegram:<br><code>/setpassword &lt;pass&gt;</code></p>
+    <p class="lhint">Set password via Telegram:<br><code>/setpassword <pass></code></p>
   </div>
 </div>""", "Sign in")
 
@@ -777,11 +857,10 @@ async def handle_drives(request: web.Request) -> web.Response:
 
     return _page(f"""
 <nav>
-  <a href="/drives" class="nav-logo">
-    <span class="nav-logo-icon">{_icon("drive", 24)}</span>
-    GDrive Bot
+  <a href="/drives" class="nav-logo" title="My Drives">
+    <img src="/static/logo.png" class="nav-logo-img" alt="GDrive Bot">
   </a>
-  <div class="nav-spacer"></div>
+  <div class="nav-center"></div>
   <a href="/logout" class="btn btn-ghost btn-sm">{_icon("signout",16)} Sign out</a>
   <div class="nav-avatar">{av_nav}</div>
 </nav>
@@ -842,13 +921,17 @@ async def handle_browser(request: web.Request) -> web.Response:
 
     return _page(f"""
 <nav>
-  <a href="/drives" class="nav-logo">
-    <span class="nav-logo-icon">{_icon("drive", 22)}</span>
-    GDrive Bot
+  <a href="/drives" class="nav-logo" title="My Drives">
+    <img src="/static/logo.png" class="nav-logo-img" alt="GDrive Bot">
   </a>
-  <div class="nav-spacer"></div>
-  <button class="btn btn-icon" onclick="openSearchModal()" title="Search">{_icon("search",20)}</button>
-  <a href="/logout" class="btn btn-icon" title="Sign out">{_icon("signout",20)}</a>
+  <div class="nav-center">
+    <div class="nav-search-wrap">
+      {_icon("search", 16)}
+      <input id="nav-search-input" type="text" placeholder="Search files and folders…"
+        onkeydown="if(event.key==='Enter')doNavSearch()"
+        oninput="onNavSearchInput(this.value)">
+    </div>
+  </div>
   <div class="nav-avatar" title="{email}" onclick="toggleAvPopup()" id="nav-av">{av_nav}</div>
 </nav>
 
@@ -864,6 +947,13 @@ async def handle_browser(request: web.Request) -> web.Response:
   <div class="avp-storage" id="avp-storage">
     <div class="avp-sk" style="width:100%;height:6px;margin:8px 0 6px"></div>
     <div class="avp-sk" style="width:60%;height:10px;margin-top:4px"></div>
+  </div>
+  <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Accent Color</div>
+    <div id="accent-swatches" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"></div>
+  </div>
+  <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+    <a href="/logout" class="btn btn-ghost btn-wide" style="color:var(--red);border-color:rgba(239,68,68,.3);justify-content:center;gap:8px">{_icon("signout",16)} Sign out</a>
   </div>
 </div>
 
@@ -896,7 +986,6 @@ async def handle_browser(request: web.Request) -> web.Response:
       <div class="breadcrumb" id="bc">
         <span class="bc-crumb last">My Drive</span>
       </div>
-      <button class="btn btn-icon" onclick="refresh()" title="Refresh">{_icon("refresh",18)}</button>
     </div>
 
     <!-- File list -->
@@ -938,8 +1027,8 @@ async def handle_browser(request: web.Request) -> web.Response:
   <div class="modal-title">{_icon("rename",18)} Rename</div>
   <div class="fg"><label>New name</label><input id="i-rename" type="text"></div>
   <div class="macts">
-    <button class="btn btn-ghost" onclick="closeModal('rename')">Cancel</button>
-    <button class="btn btn-primary" onclick="doRename()">Rename</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('rename')">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="doRename()">Rename</button>
   </div>
 </div></div>
 
@@ -948,19 +1037,19 @@ async def handle_browser(request: web.Request) -> web.Response:
   <div class="modal-title">{_icon("newfolder",18)} New folder</div>
   <div class="fg"><label>Folder name</label><input id="i-mkdir" type="text" placeholder="Untitled folder"></div>
   <div class="macts">
-    <button class="btn btn-ghost" onclick="closeModal('mkdir')">Cancel</button>
-    <button class="btn btn-primary" onclick="doMkdir()">Create</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('mkdir')">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="doMkdir()">Create</button>
   </div>
 </div></div>
 
 <!-- Delete modal -->
 <div class="moverlay" id="m-delete"><div class="modal">
   <div class="modal-title">{_icon("delete",18)} Move to trash</div>
-  <p id="del-msg" style="color:var(--text2);font-size:15px;margin-bottom:8px"></p>
-  <p style="font-size:13px;color:var(--text3)">This action cannot be undone.</p>
+  <p id="del-msg" style="color:var(--text2);font-size:14px;margin-bottom:6px"></p>
+  <p style="font-size:12px;color:var(--text3)">This action cannot be undone.</p>
   <div class="macts">
-    <button class="btn btn-ghost" onclick="closeModal('delete')">Cancel</button>
-    <button class="btn btn-danger" onclick="doDelete()">Move to trash</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('delete')">Cancel</button>
+    <button class="btn btn-danger btn-sm" onclick="doDelete()">Move to trash</button>
   </div>
 </div></div>
 
@@ -969,62 +1058,63 @@ async def handle_browser(request: web.Request) -> web.Response:
   <div class="modal-title">{_icon("upload",18)} Upload files</div>
   <div class="dropzone" id="dz">
     <input type="file" id="fi" multiple onchange="addFiles(this.files)">
-    <div class="dz-icon">{_icon("upload", 42)}</div>
+    <div class="dz-icon">{_icon("upload", 34)}</div>
     <div class="dz-txt">Drop files here or tap to browse</div>
     <div class="dz-hint">Max {max_mb} per file</div>
   </div>
   <div class="ulist" id="ulist"></div>
-  <div class="macts" style="margin-top:16px">
-    <button class="btn btn-ghost" onclick="closeModal('upload');uploadQ=[];document.getElementById('ulist').innerHTML='';document.getElementById('fi').value=''">Cancel</button>
-    <button class="btn btn-primary" id="ubtn" onclick="startUpload()">{_icon("upload",16)} Upload</button>
+  <div class="macts" style="margin-top:14px">
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('upload');uploadQ=[];document.getElementById('ulist').innerHTML='';document.getElementById('fi').value=''">Cancel</button>
+    <button class="btn btn-primary btn-sm" id="ubtn" onclick="startUpload()">{_icon("upload",15)} Upload</button>
   </div>
 </div></div>
 
 <!-- Move modal -->
 <div class="moverlay" id="m-move"><div class="modal">
   <div class="modal-title">{_icon("move",18)} Move to</div>
-  <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Select destination folder</p>
+  <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Select destination folder</p>
   <div class="ftree" id="move-tree"></div>
   <div class="macts">
-    <button class="btn btn-ghost" onclick="closeModal('move')">Cancel</button>
-    <button class="btn btn-primary" onclick="confirmMove()">Move here</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('move')">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="confirmMove()">Move here</button>
   </div>
 </div></div>
 
 <!-- Copy modal -->
 <div class="moverlay" id="m-copy"><div class="modal">
   <div class="modal-title">{_icon("copy",18)} Copy to</div>
-  <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Select destination folder</p>
+  <p style="font-size:12px;color:var(--text3);margin-bottom:10px">Select destination folder</p>
   <div class="ftree" id="copy-tree"></div>
   <div class="macts">
-    <button class="btn btn-ghost" onclick="closeModal('copy')">Cancel</button>
-    <button class="btn btn-primary" onclick="confirmCopy()">Copy here</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('copy')">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="confirmCopy()">Copy here</button>
   </div>
 </div></div>
 
 <!-- Search modal -->
-<div class="moverlay" id="m-search"><div class="modal">
+<div class="moverlay" id="m-search"><div class="modal" style="max-width:480px">
   <div class="modal-title">{_icon("search",18)} Search Drive</div>
-  <div class="fg" style="display:flex;gap:10px;margin-bottom:0">
+  <div class="fg" style="display:flex;gap:8px;margin-bottom:0">
     <input id="i-search" type="text" placeholder="Search files and folders..." style="flex:1">
-    <button class="btn btn-primary" onclick="doSearch()">{_icon("search",16)}</button>
+    <button class="btn btn-primary" onclick="doSearch()" style="flex-shrink:0">{_icon("search",16)}</button>
   </div>
-  <div id="search-res" style="max-height:300px;overflow-y:auto;margin-top:14px;border:1px solid var(--border);border-radius:var(--r8)"></div>
-  <div class="macts"><button class="btn btn-ghost" onclick="closeModal('search')">Close</button></div>
+  <div id="search-res" style="max-height:340px;overflow-y:auto;margin-top:12px;border:1px solid var(--border);border-radius:var(--r8)"></div>
+  <div class="macts"><button class="btn btn-ghost btn-sm" onclick="clearSel();closeModal('search')">Close</button></div>
 </div></div>
+
 
 <!-- Hidden icon store for JS -->
 <div id="icons" style="display:none"
-  data-folder='{_icon("folder",32,"ico-folder").replace("'","&#39;")}'
-  data-file='{_icon("file",32).replace("'","&#39;")}'
-  data-image='{_icon("image",32,"ico-image").replace("'","&#39;")}'
-  data-video='{_icon("video",32,"ico-video").replace("'","&#39;")}'
-  data-audio='{_icon("audio",32,"ico-audio").replace("'","&#39;")}'
-  data-pdf='{_icon("pdf",32).replace("'","&#39;")}'
-  data-zip='{_icon("zip",32,"ico-zip").replace("'","&#39;")}'
-  data-doc='{_icon("doc",32).replace("'","&#39;")}'
-  data-sheet='{_icon("sheet",32).replace("'","&#39;")}'
-  data-code='{_icon("code",32,"ico-code").replace("'","&#39;")}'
+  data-folder='{_icon("folder",32,"","#0386c3").replace("'","&#39;")}'
+  data-file='{_icon("file",32,"","#607d8b").replace("'","&#39;")}'
+  data-image='{_icon("image",32,"","#a78bfa").replace("'","&#39;")}'
+  data-video='{_icon("video",32,"","#f87171").replace("'","&#39;")}'
+  data-audio='{_icon("audio",32,"","#e55835").replace("'","&#39;")}'
+  data-pdf='{_icon("pdf",32,"","#e53e3e").replace("'","&#39;")}'
+  data-zip='{_icon("zip",32,"","#795547").replace("'","&#39;")}'
+  data-doc='{_icon("doc",32,"","#3f51b5").replace("'","&#39;")}'
+  data-sheet='{_icon("sheet",32,"","#38a169").replace("'","&#39;")}'
+  data-code='{_icon("code",32,"","#60a5fa").replace("'","&#39;")}'
   data-dl='{_icon("download",20).replace("'","&#39;")}'
   data-rename='{_icon("rename",20).replace("'","&#39;")}'
   data-move='{_icon("move",20).replace("'","&#39;")}'
@@ -1089,7 +1179,10 @@ function renderBC(){{
     h+=`<span class="bc-sep">›</span><span class="bc-crumb${{last?' last':''}}" onclick="navFolder('${{f.id}}','${{f.name.replace(/'/g,"&#39;")}}')">` +
        `${{f.name}}</span>`;
   }});
-  document.getElementById('bc').innerHTML=h;
+  const bc=document.getElementById('bc');
+  bc.innerHTML=h;
+  // Scroll breadcrumb to the end so current folder is always visible
+  setTimeout(()=>{{bc.scrollLeft=bc.scrollWidth;}},0);
   document.getElementById('back-btn').style.display=stack.length>0?'':'none';
 }}
 
@@ -1255,19 +1348,40 @@ function clearSel(){{
   sel.clear();
   document.querySelectorAll('.file-item input[type=checkbox]').forEach(c=>c.checked=false);
   document.querySelectorAll('.file-item.sel').forEach(r=>r.classList.remove('sel'));
+  document.querySelectorAll('.sri.sri-sel').forEach(r=>r.classList.remove('sri-sel'));
   document.body.classList.remove('select-mode');
+  document.getElementById('selbar').classList.remove('above-modal');
+  // Always restore the close button to the default clearSel handler
+  const closeBtn=document.querySelector('#selbar .sel-close');
+  if(closeBtn)closeBtn.onclick=function(){{clearSel();}};
   updateSel();
+}}
+
+// ── Search-behind helper: push search modal behind action modal, restore after ──
+function _pushSearchBehind(){{
+  const sm=document.getElementById('m-search');
+  if(sm&&sm.classList.contains('open'))sm.style.zIndex='900';
+}}
+function _restoreSearchZ(){{
+  const sm=document.getElementById('m-search');
+  if(sm)sm.style.zIndex='';
 }}
 
 // ── Bulk actions ──
 function selDl(){{[...sel].forEach(id=>window.open(`/api/download/${{id}}?drive=${{DI}}`,'_blank'))}}
 function selRename(){{
-  if(sel.size===1){{openRename([...sel][0],document.querySelector(`[data-id="${{[...sel][0]}}"]`)?.dataset.name||'')}}
+  if(sel.size===1){{_pushSearchBehind();openRename([...sel][0],document.querySelector(`[data-id="${{[...sel][0]}}"]`)?.dataset.name||'')}}
   else toast('Select only one item to rename','warn');
 }}
-function selMove(){{if(sel.size)openMoveFor([...sel])}}
-function selCopy(){{if(sel.size)openCopyFor([...sel])}}
-function selDel(){{if(sel.size)openDel([...sel],'')}}
+function selMove(){{if(sel.size){{_pushSearchBehind();openMoveFor([...sel])}}}}
+function selCopy(){{if(sel.size){{_pushSearchBehind();openCopyFor([...sel])}}}}
+function selDel(){{
+  if(sel.size){{
+    _pushSearchBehind();
+    const name=document.querySelector(`[data-id="${{[...sel][0]}}"]`)?.dataset.name||'';
+    openDel([...sel],name);
+  }}
+}}
 
 // ── FAB ──
 function toggleFab(){{
@@ -1429,6 +1543,44 @@ async function startUpload(){{
   load();
 }}
 
+// ── Nav inline search ──
+function doNavSearch(){{
+  const q=document.getElementById('nav-search-input').value.trim();
+  if(!q)return;
+  document.getElementById('i-search').value=q;
+  document.getElementById('search-res').innerHTML='';
+  openModal('search');
+  doSearch();
+}}
+function onNavSearchInput(v){{
+  // pressing Enter triggers doNavSearch via onkeydown; live feedback optional
+}}
+
+// ── Search result toolbar ──
+let _sriLongTimer=null;
+function closeSriFromSearch(){{
+  // remove the temp file injected for the search result, clear selection
+  const sr=document.getElementById('search-res');
+  sr&&sr.querySelectorAll('.sri.sri-sel').forEach(e=>e.classList.remove('sri-sel'));
+  clearSel();
+}}
+function sriLongPress(f,el){{
+  // Inject the file into the main files array temporarily so selbar actions can find it
+  if(!files.find(x=>x.id===f.id)) files.push(f);
+  // Select it via the normal sel mechanism
+  sel.clear();
+  sel.add(f.id);
+  document.querySelectorAll('.sri.sri-sel').forEach(e=>e.classList.remove('sri-sel'));
+  el.classList.add('sri-sel');
+  // Show the existing selbar above the modal overlay
+  const selbar=document.getElementById('selbar');
+  selbar.classList.add('above-modal');
+  document.getElementById('selcnt').textContent='1 selected';
+  selbar.classList.add('show');
+  // Override the selbar close button to also clean up search highlight
+  document.querySelector('#selbar .sel-close').onclick=function(){{closeSriFromSearch();}};
+}}
+
 // ── Search ──
 function openSearchModal(){{
   document.getElementById('i-search').value='';
@@ -1439,20 +1591,66 @@ function openSearchModal(){{
 async function doSearch(){{
   const q=document.getElementById('i-search').value.trim();if(!q)return;
   const el=document.getElementById('search-res');
+  clearSel();
   el.innerHTML='<div style="padding:16px;text-align:center;color:var(--text3);font-size:14px">Searching...</div>';
   const r=await fetch(`/api/search?drive=${{DI}}&q=${{encodeURIComponent(q)}}`);
   const d=await r.json();
-  if(!d.files||!d.files.length){{el.innerHTML=`<div style="padding:16px;text-align:center;color:var(--text3);font-size:14px">No results for "${{q}}"</div>`;return}}
+  if(!d.files||!d.files.length){{
+    el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text3);font-size:14px">No results for "${{q}}"</div>`;
+    return;
+  }}
   el.innerHTML=d.files.map(f=>{{
     const isF=isFol(f);
-    const dlBtn=!isF?`<button class="btn-icon" onclick="event.stopPropagation();dlFile('${{f.id}}')" title="Download">${{IC.dl}}</button>`:'';
-    return`<div class="sri" onclick="closeModal('search');${{isF?`navFolder('${{f.id}}','${{f.name.replace(/'/g,"&#39;")}}')`:''}}">
-      ${{getIco(f.mimeType)}}
-      <span class="sri-name">${{f.name}}</span>
-      ${{dlBtn}}
+    const nm=f.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const sizeStr=isF?'Directory':sz(f.size);
+    const dateStr=dt(f.modifiedTime);
+    return`<div class="sri" data-id="${{f.id}}"
+        onclick="sriClick(event,'${{f.id}}')"
+        oncontextmenu="event.preventDefault();sriLongPressById('${{f.id}}')"
+        ontouchstart="sriStartLong(event,'${{f.id}}')" ontouchend="sriEndLong()" ontouchmove="sriEndLong()">
+      <div class="sri-icon">${{getIco(f.mimeType)}}</div>
+      <div class="sri-info">
+        <div class="sri-name">${{f.name}}</div>
+        <div class="sri-meta">
+          <span class="sri-size">${{sizeStr}}</span>
+          <span class="sri-date">${{dateStr}}</span>
+        </div>
+      </div>
     </div>`;
   }}).join('');
+  // Store file data on elements for lookup
+  d.files.forEach(f=>{{
+    const el2=el.querySelector(`[data-id="${{f.id}}"]`);
+    if(el2)el2._sriData=f;
+  }});
 }}
+function sriClick(e,id){{
+  const el=document.getElementById('search-res').querySelector(`[data-id="${{id}}"]`);
+  const f=el&&el._sriData;if(!f)return;
+  // If selbar is already showing (search select mode), toggle this item in/out of sel
+  if(document.getElementById('selbar').classList.contains('show')){{
+    if(!files.find(x=>x.id===f.id)) files.push(f);
+    if(sel.has(id)){{
+      sel.delete(id);
+      el.classList.remove('sri-sel');
+    }}else{{
+      sel.add(id);
+      el.classList.add('sri-sel');
+    }}
+    if(sel.size===0){{clearSel();return;}}
+    document.getElementById('selcnt').textContent=`${{sel.size}} selected`;
+    return;
+  }}
+  if(isFol(f)){{closeModal('search');clearSel();navFolder(f.id,f.name);}}
+  else dlFile(f.id);
+}}
+function sriLongPressById(id){{
+  const el=document.getElementById('search-res').querySelector(`[data-id="${{id}}"]`);
+  const f=el&&el._sriData;if(!f)return;
+  sriLongPress(f,el);
+}}
+function sriStartLong(e,id){{_sriLongTimer=setTimeout(()=>sriLongPressById(id),500);}}
+function sriEndLong(){{clearTimeout(_sriLongTimer);}}
 
 // ── Keyboard shortcuts ──
 document.addEventListener('keydown',e=>{{
@@ -1462,6 +1660,8 @@ document.addEventListener('keydown',e=>{{
     else if(document.getElementById('m-search').classList.contains('open'))doSearch();
   }}
   if(e.key==='Escape'){{
+    const sm=document.getElementById('m-search');
+    if(sm)sm.style.zIndex='';
     document.querySelectorAll('.moverlay.open').forEach(m=>m.classList.remove('open'));
     clearSel();closeFab();
   }}
@@ -1508,8 +1708,66 @@ document.addEventListener('click',e=>{{
   }}
 }});
 
+// ── Accent color ──
+const ACCENT_COLORS = [
+  {{name:'Blue',     hex:'#0483c3', hex2:'#0369a1'}},
+  {{name:'Indigo',   hex:'#6366f1', hex2:'#4f46e5'}},
+  {{name:'Purple',   hex:'#a855f7', hex2:'#9333ea'}},
+  {{name:'Pink',     hex:'#ec4899', hex2:'#db2777'}},
+  {{name:'Rose',     hex:'#f43f5e', hex2:'#e11d48'}},
+  {{name:'Orange',   hex:'#f97316', hex2:'#ea6c0a'}},
+  {{name:'Amber',    hex:'#f59e0b', hex2:'#d97706'}},
+  {{name:'Green',    hex:'#22c55e', hex2:'#16a34a'}},
+  {{name:'Teal',     hex:'#14b8a6', hex2:'#0d9488'}},
+  {{name:'Cyan',     hex:'#06b6d4', hex2:'#0891b2'}},
+];
+function _hexToRgba(hex,a){{
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return`rgba(${{r}},${{g}},${{b}},${{a}})`;
+}}
+function applyAccent(hex,hex2,save){{
+  const r=document.documentElement.style;
+  r.setProperty('--accent',hex);
+  r.setProperty('--accent2',hex2);
+  r.setProperty('--accent-dim',_hexToRgba(hex,.13));
+  r.setProperty('--folder',hex);
+  // Update active swatch ring
+  document.querySelectorAll('.ac-sw').forEach(s=>s.classList.toggle('ac-sw-on',s.dataset.hex===hex));
+  if(save)localStorage.setItem('gdrive_accent',JSON.stringify({{hex,hex2}}));
+}}
+function initAccentSwatches(){{
+  const el=document.getElementById('accent-swatches');
+  if(!el)return;
+  const saved=JSON.parse(localStorage.getItem('gdrive_accent')||'null');
+  const activeHex=(saved&&saved.hex)||'#0483c3';
+  el.innerHTML=ACCENT_COLORS.map(c=>`
+    <button class="ac-sw${{c.hex===activeHex?' ac-sw-on':''}}" data-hex="${{c.hex}}" data-hex2="${{c.hex2}}"
+      title="${{c.name}}"
+      onclick="applyAccent('${{c.hex}}','${{c.hex2}}',true)"
+      style="width:28px;height:28px;border-radius:50%;background:${{c.hex}};border:2px solid ${{c.hex===activeHex?'#fff':'transparent'}};
+             box-shadow:${{c.hex===activeHex?'0 0 0 2px '+c.hex:'none'}};cursor:pointer;transition:all .15s;flex-shrink:0;outline:none">
+    </button>`).join('');
+  // Also apply saved accent on init
+  if(saved)applyAccent(saved.hex,saved.hex2,false);
+}}
+// Patch applyAccent to also update swatch border via CSS class refresh
+(function(){{
+  const orig=applyAccent;
+  // rebuild swatches border whenever applied
+  const _orig=applyAccent;
+  window.applyAccent=function(hex,hex2,save){{
+    _orig(hex,hex2,save);
+    document.querySelectorAll('.ac-sw').forEach(s=>{{
+      const on=s.dataset.hex===hex;
+      s.style.border='2px solid '+(on?'#fff':'transparent');
+      s.style.boxShadow=on?'0 0 0 2px '+hex:'none';
+    }});
+  }};
+}})();
+
 // ── Boot ──
 // navRoot() is called from DOMContentLoaded in _JS (after all functions are defined)
+initAccentSwatches();
 </script>""", f"My Drive — {email}")
 
 
@@ -1787,10 +2045,15 @@ async def api_search(request: web.Request) -> web.Response:
 
 # ── App factory ───────────────────────────────────────────────────────────────
 def create_app(db: Database, gdrive: GoogleDriveManager, bot=None) -> web.Application:
+    import os
     app = web.Application(client_max_size=Config.MAX_FILE_SIZE + 10 * 1024 * 1024)
     app["db"]     = db
     app["gdrive"] = gdrive
     app["bot"]    = bot
+
+    # Serve static assets (logo.png, favicon.png) from the webui directory
+    _webui_dir = os.path.dirname(os.path.abspath(__file__))
+    app.router.add_static("/static", _webui_dir, show_index=False)
 
     app.router.add_route("GET",  "/",            handle_login)
     app.router.add_route("POST", "/",            handle_login)
