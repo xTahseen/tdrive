@@ -1948,28 +1948,66 @@ async def api_mkdir(request: web.Request) -> web.Response:
 
 @require_auth
 async def api_download(request: web.Request) -> web.Response:
-    """Mirror download: 302 redirect to Google CDN. Zero bytes through server."""
+    """Proxy download: stream bytes from Google through our server (no browser redirect).
+    This avoids Google's automated-request detection which triggers when browsers
+    hit googleapis.com directly with an access_token in the query string.
+    Instead we fetch server-to-server using Authorization: Bearer, just like goindex.
+    """
+    import aiohttp as _aiohttp
     uid = request["uid"]
     fid = request.match_info["fid"]
     di  = int(request.rel_url.query.get("drive", 0))
     try:
-        meta = await request.app["gdrive"].get_file_meta_for_download(uid, fid, di)
+        meta         = await request.app["gdrive"].get_file_meta_for_download(uid, fid, di)
         mime         = meta.get("mimeType", "")
         export_map   = meta.get("export_map", {})
         access_token = meta.get("access_token", "")
         file_id      = meta.get("id", fid)
+        file_name    = meta.get("name", fid)
 
         if mime in export_map:
-            export_mime, _ = export_map[mime]
-            url = (f"https://www.googleapis.com/drive/v3/files/{file_id}/export"
-                   f"?mimeType={urllib.parse.quote(export_mime)}"
-                   f"&access_token={urllib.parse.quote(access_token)}")
+            export_mime, ext = export_map[mime]
+            gdrive_url = (f"https://www.googleapis.com/drive/v3/files/{file_id}/export"
+                          f"?alt=media&mimeType={urllib.parse.quote(export_mime)}")
+            if not file_name.endswith(ext):
+                file_name += ext
         else:
-            url = (f"https://www.googleapis.com/drive/v3/files/{file_id}"
-                   f"?alt=media&access_token={urllib.parse.quote(access_token)}")
+            gdrive_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
 
-        raise web.HTTPFound(url)
-    except web.HTTPFound:
+        # Use Authorization header (server-to-server) — never expose token in URL to browser
+        req_headers = {"Authorization": f"Bearer {access_token}"}
+        range_hdr = request.headers.get("Range")
+        if range_hdr:
+            req_headers["Range"] = range_hdr
+
+        async with _aiohttp.ClientSession() as session:
+            async with session.get(gdrive_url, headers=req_headers) as gr:
+                if gr.status == 403:
+                    # Retry with acknowledgeAbuse for virus-flagged files
+                    abuse_url = gdrive_url + "&acknowledgeAbuse=true"
+                    async with session.get(abuse_url, headers=req_headers) as gr2:
+                        gr = gr2
+
+                resp_headers = {
+                    "Content-Disposition": (
+                        f'attachment; filename="{urllib.parse.quote(file_name)}"'
+                    ),
+                    "Content-Type": gr.headers.get(
+                        "Content-Type", "application/octet-stream"
+                    ),
+                }
+                for h in ("Content-Length", "Content-Range", "Accept-Ranges"):
+                    if h in gr.headers:
+                        resp_headers[h] = gr.headers[h]
+
+                response = web.StreamResponse(status=gr.status, headers=resp_headers)
+                await response.prepare(request)
+                async for chunk in gr.content.iter_chunked(65536):
+                    await response.write(chunk)
+                await response.write_eof()
+                return response
+
+    except web.HTTPException:
         raise
     except PermissionError:
         raise web.HTTPUnauthorized()
