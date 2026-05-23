@@ -79,7 +79,8 @@ def register(app: Client):
         if not await client.db.is_authenticated(user_id):
             await message.reply_text(
                 "❌ **Not connected!**\n\n"
-                "Please connect your Google Drive first with /drives."
+                "Please connect your Google Drive first with /drives.",
+                quote=True
             )
             return
 
@@ -87,7 +88,7 @@ def register(app: Client):
 
         if file_size > Config.MAX_FILE_SIZE:
             size_gb = Config.MAX_FILE_SIZE / (1024 ** 3)
-            await message.reply_text(f"❌ File too large. Maximum allowed size is **{size_gb:.1f} GB**.")
+            await message.reply_text(f"❌ File too large. Maximum allowed size is **{size_gb:.1f} GB**.", quote=True)
             return
 
         # Cancel any existing transfer for this user
@@ -132,6 +133,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
         f"Size: `{_fmt_size(file_size)}`\n"
         f"{drive_display}  →  {folder_display}\n\n",
         reply_markup=_cancel_keyboard(user_id),
+        quote=True
     )
 
     file_path = os.path.join(Config.TEMP_DIR, f"{user_id}_{file_name}")
