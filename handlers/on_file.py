@@ -68,7 +68,7 @@ def register(app: Client):
         task = _active_transfers.get(uid)
         if task and not task.done():
             task.cancel()
-            await query.answer("⏹ Cancelling...", show_alert=False)
+            await query.answer("Cancelling...", show_alert=False)
         else:
             await query.answer("No active transfer to cancel.", show_alert=True)
 
@@ -124,8 +124,8 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
         folder_id = None
         folder_name = None
 
-    folder_display = f"📁 `{folder_name}`" if folder_name else "📁 Drive root"
-    drive_display = f"☁️ `{active_email}`"
+    folder_display = f"`{folder_name}`" if folder_name else "Root"
+    drive_display = f"`{active_email}`"
 
     status_msg = await message.reply_text(
         f"**Processing:** `{file_name}`\n\n"
@@ -190,7 +190,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"**Uploading to Google Drive:** `{file_name}`\n\n"
+                        f"**Uploading:** `{file_name}`\n\n"
                         f"{bar} {pct}%\n\n"
                         f"`{_fmt_size(bytes_done)}` / `{_fmt_size(upload_size)}`\n"
                         f"Speed: `{_fmt_speed(speed)}`\n"
@@ -202,7 +202,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                     pass
 
         await status_msg.edit_text(
-            f"☁️ **Uploading to Google Drive...**\n`{file_name}`\n"
+            f"**Uploading...**\n`{file_name}`\n"
             f"{drive_display}  →  {folder_display}",
             reply_markup=_cancel_keyboard(user_id),
         )
@@ -238,7 +238,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
         ])
 
         await status_msg.edit_text(
-            f"**Upload Successful!**\n\n"
+            f"**Upload Successful! 🎉**\n\n"
             f"**File:** `{drive_name}`\n"
             f"**Size:** `{drive_size}`\n"
             f"**Account:** `{active_email}`\n"
