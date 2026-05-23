@@ -129,9 +129,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
     drive_display = f"`{active_email}`"
 
     status_msg = await message.reply_text(
-        f"**Processing:** `{file_name}`\n\n"
-        f"Size: `{_fmt_size(file_size)}`\n"
-        f"{drive_display}  →  {folder_display}\n\n",
+        f"**Processing**\n\n",
         reply_markup=_cancel_keyboard(user_id),
         quote=True
     )
