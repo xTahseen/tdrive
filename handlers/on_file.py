@@ -128,8 +128,8 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
     drive_display = f"☁️ `{active_email}`"
 
     status_msg = await message.reply_text(
-        f"📥 **Processing:** `{file_name}`\n\n"
-        f"📦 Size: `{_fmt_size(file_size)}`\n"
+        f"**Processing:** `{file_name}`\n\n"
+        f"Size: `{_fmt_size(file_size)}`\n"
         f"{drive_display}  →  {folder_display}\n\n",
         reply_markup=_cancel_keyboard(user_id),
     )
@@ -151,11 +151,11 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"📥 **Downloading:** `{file_name}`\n\n"
+                        f"**Downloading:** `{file_name}`\n\n"
                         f"{bar} {pct}%\n\n"
-                        f"🗂 `{_fmt_size(current)}` / `{_fmt_size(total)}`\n"
-                        f"⚡ Speed: `{_fmt_speed(speed)}`\n"
-                        f"⌛ ETA: `{_fmt_eta(eta)}`",
+                        f"`{_fmt_size(current)}` / `{_fmt_size(total)}`\n"
+                        f"Speed: `{_fmt_speed(speed)}`\n"
+                        f"ETA: `{_fmt_eta(eta)}`",
                         reply_markup=_cancel_keyboard(user_id),
                     )
                 except Exception:
@@ -190,11 +190,11 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"☁️ **Uploading to Google Drive:** `{file_name}`\n\n"
+                        f"**Uploading to Google Drive:** `{file_name}`\n\n"
                         f"{bar} {pct}%\n\n"
-                        f"🗂 `{_fmt_size(bytes_done)}` / `{_fmt_size(upload_size)}`\n"
-                        f"⚡ Speed: `{_fmt_speed(speed)}`\n"
-                        f"⌛ ETA: `{_fmt_eta(eta)}`\n"
+                        f"`{_fmt_size(bytes_done)}` / `{_fmt_size(upload_size)}`\n"
+                        f"Speed: `{_fmt_speed(speed)}`\n"
+                        f"ETA: `{_fmt_eta(eta)}`\n"
                         f"{drive_display}  →  {folder_display}",
                         reply_markup=_cancel_keyboard(user_id),
                     )
@@ -238,11 +238,11 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
         ])
 
         await status_msg.edit_text(
-            f"✅ **Upload Successful!**\n\n"
-            f"📄 **File:** `{drive_name}`\n"
-            f"📦 **Size:** `{drive_size}`\n"
-            f"☁️ **Account:** `{active_email}`\n"
-            f"📁 **Folder:** `{folder_name or 'Drive root'}`",
+            f"**Upload Successful!**\n\n"
+            f"**File:** `{drive_name}`\n"
+            f"**Size:** `{drive_size}`\n"
+            f"**Account:** `{active_email}`\n"
+            f"**Folder:** `{folder_name or 'Drive root'}`",
             reply_markup=keyboard,
         )
 
