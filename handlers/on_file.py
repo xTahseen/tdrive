@@ -90,6 +90,13 @@ def register(app: Client):
             await message.reply_text(f"❌ File too large. Maximum allowed size is **{size_gb:.1f} GB**.")
             return
 
+        # Reply to the file message to indicate processing has started
+        await message.reply_text(
+            f"🔄 **Processing file:** `{file_name}`\n"
+            f"Size: `{_fmt_size(file_size)}`\n\n"
+            f"Please wait while we prepare your file..."
+        )
+
         # Cancel any existing transfer for this user
         old_task = _active_transfers.get(user_id)
         if old_task and not old_task.done():
@@ -128,9 +135,10 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
     drive_display = f"☁️ `{active_email}`"
 
     status_msg = await message.reply_text(
-        f"**Processing:** `{file_name}`\n\n"
+        f"**Downloading:** `{file_name}`\n\n"
         f"Size: `{_fmt_size(file_size)}`\n"
-        f"{drive_display}  →  {folder_display}\n\n",
+        f"{drive_display}  →  {folder_display}\n\n"
+        f"⬇️ Starting download...",
         reply_markup=_cancel_keyboard(user_id),
     )
 
@@ -238,7 +246,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
         ])
 
         await status_msg.edit_text(
-            f"**Upload Successful!**\n\n"
+            f"✅ **Upload Successful!**\n\n"
             f"**File:** `{drive_name}`\n"
             f"**Size:** `{drive_size}`\n"
             f"**Account:** `{active_email}`\n"
