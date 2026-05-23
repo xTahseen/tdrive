@@ -155,7 +155,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                         f"📥 **Downloading:** `{file_name}`\n\n"
                         f"{bar} {pct}%\n\n"
                         f"🗂 `{_fmt_size(current)}` of `{_fmt_size(total)}`\n"
-                        f"⚡ Speed: `{_fmt_speed(speed)}`"
+                        f"⚡ Speed: `{_fmt_speed(speed)}`\n"
                         f"⌛ ETA: `{_fmt_eta(eta)}`",
                         reply_markup=_cancel_keyboard(user_id),
                     )
