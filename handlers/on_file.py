@@ -239,7 +239,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
 
         await status_msg.edit_text(
             f"**Upload Successful! 🎉**\n\n"
-            f"**File:** `{drive_name}`\n"
+            f"**Title:** `{drive_name}`\n"
             f"**Size:** `{drive_size}`\n"
             f"**Account:** `{active_email}`\n"
             f"**Folder:** `{folder_name or 'Drive root'}`",
