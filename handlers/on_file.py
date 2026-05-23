@@ -242,8 +242,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
             f"📄 **File:** `{drive_name}`\n"
             f"📦 **Size:** `{drive_size}`\n"
             f"☁️ **Account:** `{active_email}`\n"
-            f"📁 **Folder:** `{folder_name or 'Drive root'}`\n\n"
-            "_Use the buttons below to manage this file:_",
+            f"📁 **Folder:** `{folder_name or 'Drive root'}`",
             reply_markup=keyboard,
         )
 
