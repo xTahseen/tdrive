@@ -152,10 +152,11 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"📥 **Downloading:** `{file_name}`\n"
-                        f"{bar} {pct}%\n"
-                        f"`{_fmt_size(current)}` / `{_fmt_size(total)}`\n"
-                        f"⚡ Speed: `{_fmt_speed(speed)}`  ⏱ ETA: `{_fmt_eta(eta)}`",
+                        f"📥 **Downloading:** `{file_name}`\n\n"
+                        f"{bar} {pct}%\n\n"
+                        f"🗂 `{_fmt_size(current)}` of `{_fmt_size(total)}`\n"
+                        f"⚡ Speed: `{_fmt_speed(speed)}`"
+                        f"⌛ ETA: `{_fmt_eta(eta)}`",
                         reply_markup=_cancel_keyboard(user_id),
                     )
                 except Exception:
@@ -190,10 +191,11 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"☁️ **Uploading to Google Drive:** `{file_name}`\n"
-                        f"{bar} {pct}%\n"
-                        f"`{_fmt_size(bytes_done)}` / `{_fmt_size(upload_size)}`\n"
-                        f"⚡ Speed: `{_fmt_speed(speed)}`  ⏱ ETA: `{_fmt_eta(eta)}`\n"
+                        f"☁️ **Uploading to Google Drive:** `{file_name}`\n\n"
+                        f"{bar} {pct}%\n\n"
+                        f"🗂 `{_fmt_size(bytes_done)}` of `{_fmt_size(upload_size)}`\n"
+                        f"⚡ Speed: `{_fmt_speed(speed)}`\n"
+                        f"⌛ ETA: `{_fmt_eta(eta)}`\n"
                         f"{drive_display}  →  {folder_display}",
                         reply_markup=_cancel_keyboard(user_id),
                     )
