@@ -296,7 +296,7 @@ def _fmt_eta(seconds: int) -> str:
 
 def _progress_bar(pct: int, length: int = 10) -> str:
     filled = int(pct / 100 * length)
-    return "▓" * filled + "░" * (length - filled)
+    return "▰" * filled + "▱" * (length - filled)
 
 
 def _cleanup(path: str):
