@@ -151,7 +151,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"**Downloading:** `{file_name}`\n\n"
+                        f"**Downloading**\n\n"
                         f"{bar} {pct}%\n\n"
                         f"`{_fmt_size(current)}` / `{_fmt_size(total)}`\n"
                         f"Speed: `{_fmt_speed(speed)}`\n"
@@ -190,7 +190,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                 bar = _progress_bar(pct)
                 try:
                     await status_msg.edit_text(
-                        f"**Uploading:** `{file_name}`\n\n"
+                        f"**Uploading**\n\n"
                         f"{bar} {pct}%\n\n"
                         f"`{_fmt_size(bytes_done)}` / `{_fmt_size(upload_size)}`\n"
                         f"Speed: `{_fmt_speed(speed)}`\n"
