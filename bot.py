@@ -9,6 +9,8 @@ from config import Config
 from database import Database
 from gdrive import GoogleDriveManager
 from handlers import register_handlers
+from logger import ensure_indexes, set_bot_client
+from tasker import get_queue_manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,7 +45,12 @@ async def main():
     await db.connect()
     logger.info("MongoDB connected successfully.")
 
+    await ensure_indexes(db.db)
     await db.migrate_legacy_tokens()
+
+    mgr = get_queue_manager()
+    await mgr.start()
+    logger.info("Upload queue manager started.")
 
     app = Client(
         "gdrive_bot",
@@ -59,10 +66,13 @@ async def main():
 
     register_handlers(app)
 
-    logger.info("Starting bot...")
+    logger.info("Starting bot…")
     await app.start()
 
-    # Build bot commands list
+    # Give logger the live client so it can send to the log group
+    set_bot_client(app)
+
+    # Public command list — /stats intentionally excluded (admin-only, hidden)
     commands = [
         BotCommand("start",   "Start the bot"),
         BotCommand("drives",  "Manage Drive accounts & connect new ones"),
@@ -77,7 +87,6 @@ async def main():
     await app.set_bot_commands(commands)
     logger.info("Bot commands synced with Telegram.")
 
-    # Start WebUI if enabled
     webui_runner = None
     if Config.WEBUI_ENABLED:
         try:
@@ -91,6 +100,7 @@ async def main():
     await idle()
 
     await app.stop()
+    await mgr.stop()
     if webui_runner:
         await webui_runner.cleanup()
         logger.info("WebUI stopped.")

@@ -5,16 +5,17 @@ import time
 from pathlib import Path
 
 from pyrogram import Client, filters
+from pyrogram.errors import UserIsBlocked, InputUserDeactivated
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import Config
+from logger import log_file_upload
+from tasker import get_queue_manager, UploadJob
+from handlers.on_member_events import handle_send_error
 
 logger = logging.getLogger(__name__)
 
 Path(Config.TEMP_DIR).mkdir(parents=True, exist_ok=True)
-
-# Tracks active transfer tasks: user_id -> asyncio.Task
-_active_transfers: dict[int, asyncio.Task] = {}
 
 _file_filter = (
     filters.document
@@ -65,22 +66,24 @@ def register(app: Client):
         if query.from_user.id != uid:
             await query.answer("This isn't your transfer.", show_alert=True)
             return
-        task = _active_transfers.get(uid)
-        if task and not task.done():
-            task.cancel()
-            await query.answer("Cancelling...", show_alert=False)
+        mgr = get_queue_manager()
+        cancelled = await mgr.cancel_active(uid)
+        if cancelled:
+            await query.answer("Cancelling…", show_alert=False)
         else:
             await query.answer("No active transfer to cancel.", show_alert=True)
 
     @app.on_message(_file_filter & filters.private)
     async def file_handler(client: Client, message: Message):
-        user_id = message.from_user.id
+        user_id    = message.from_user.id
+        username   = message.from_user.username
+        first_name = message.from_user.first_name
 
         if not await client.db.is_authenticated(user_id):
             await message.reply_text(
                 "❌ **Not connected!**\n\n"
                 "Please connect your Google Drive first with /drives.",
-                quote=True
+                quote=True,
             )
             return
 
@@ -88,64 +91,131 @@ def register(app: Client):
 
         if file_size > Config.MAX_FILE_SIZE:
             size_gb = Config.MAX_FILE_SIZE / (1024 ** 3)
-            await message.reply_text(f"❌ File too large. Maximum allowed size is **{size_gb:.1f} GB**.", quote=True)
+            await message.reply_text(
+                f"❌ File too large. Maximum allowed size is **{size_gb:.1f} GB**.",
+                quote=True,
+            )
             return
 
-        # Cancel any existing transfer for this user
-        old_task = _active_transfers.get(user_id)
-        if old_task and not old_task.done():
-            old_task.cancel()
+        mgr     = get_queue_manager()
+        pending = mgr.queue_size(user_id)
+        active  = mgr.is_active(user_id)
 
-        task = asyncio.ensure_future(_do_upload(client, message, user_id, file_name, file_size))
-        _active_transfers[user_id] = task
+        if active or pending > 0:
+            # Send a queue-position message NOW and pass it into the job
+            # so _do_upload can edit it in-place when the job starts.
+            position = pending + 1
+            queue_msg = await message.reply_text(
+                f"⏳ **Queued** — position **#{position}**\n"
+                f"`{file_name}` will start after your current upload finishes.",
+                quote=True,
+            )
+            status_msg_holder = [queue_msg]   # mutable so the closure can replace it
+        else:
+            # No queue — send the initial "Processing" message here so it
+            # appears immediately, then pass it into the job.
+            status_msg_holder = [None]        # will be created inside _do_upload
 
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        finally:
-            _active_transfers.pop(user_id, None)
+        job = UploadJob(
+            user_id   = user_id,
+            file_name = file_name,
+            file_size = file_size,
+            coro_fn   = None,
+        )
+        # coro_fn needs job.job_id (assigned above via default_factory) to
+        # build a unique temp file path, so it's wired up after construction.
+        job.coro_fn = lambda: _do_upload(
+            client, message, user_id, username, first_name,
+            file_name, file_size, status_msg_holder, job.job_id,
+        )
+
+        # Attach a callback so the queue manager can update the position message
+        # when jobs ahead of this one finish.
+        async def _position_cb(new_pos: int, _smh=status_msg_holder, _fn=file_name):
+            msg = _smh[0]
+            if msg is not None:
+                try:
+                    await msg.edit_text(
+                        f"⏳ **Queued** — position **#{new_pos}**\n"
+                        f"`{_fn}` will start after your current upload finishes."
+                    )
+                except Exception:
+                    pass
+
+        job._position_cb = _position_cb
+
+        ok, reason = await mgr.enqueue(job)
+        if not ok:
+            # Shouldn't normally happen since we checked above, but handle it
+            if status_msg_holder[0]:
+                await status_msg_holder[0].edit_text(reason)
+            else:
+                await message.reply_text(reason, quote=True)
 
 
-async def _do_upload(client: Client, message: Message, user_id: int, file_name: str, file_size: int):
-    drives = await client.db.get_all_drives(user_id)
+async def _do_upload(
+    client: Client,
+    message: Message,
+    user_id: int,
+    username: str | None,
+    first_name: str | None,
+    file_name: str,
+    file_size: int,
+    status_msg_holder: list,   # list[Message | None] — mutable reference
+    job_id: int,
+):
+    drives     = await client.db.get_all_drives(user_id)
     active_idx = await client.db.get_active_drive_index(user_id)
 
-    # Guard against stale index
     if active_idx >= len(drives):
         active_idx = 0
 
     active_email = drives[active_idx].get("email", "Drive") if drives else "Drive"
-
-    # Always read the default folder for the ACTIVE drive specifically
     folder_id, folder_name = await client.db.get_default_folder(user_id)
 
-    # Ensure folder_id is a non-empty string or None
     if not folder_id:
         folder_id = None
         folder_name = None
 
     folder_display = f"`{folder_name}`" if folder_name else "Root"
-    drive_display = f"`{active_email}`"
+    drive_display  = f"`{active_email}`"
 
-    status_msg = await message.reply_text(
-        f"**Processing**\n\n",
-        reply_markup=_cancel_keyboard(user_id),
-        quote=True
-    )
+    # If a queue message exists, edit it to "Processing…"; otherwise send fresh.
+    if status_msg_holder[0] is not None:
+        status_msg = status_msg_holder[0]
+        try:
+            await status_msg.edit_text(
+                "**Processing…**",
+                reply_markup=_cancel_keyboard(user_id),
+            )
+        except Exception:
+            pass
+    else:
+        status_msg = await message.reply_text(
+            "**Processing…**",
+            reply_markup=_cancel_keyboard(user_id),
+            quote=True,
+        )
+        status_msg_holder[0] = status_msg
 
-    file_path = os.path.join(Config.TEMP_DIR, f"{user_id}_{file_name}")
+    # Include job_id so two uploads of the same filename by the same user
+    # never share a temp path — this is what was causing the
+    # "[Errno 2] No such file or directory: '...mkv.temp'" and
+    # "[Errno 32] Broken pipe" errors when the same file was sent more than
+    # once while a previous copy was still queued/uploading.
+    file_path = os.path.join(Config.TEMP_DIR, f"{user_id}_{job_id}_{file_name}")
 
+    # ── Download ───────────────────────────────────────────────────────────────
     try:
         last_update = [time.time()]
-        dl_start = [time.time()]
+        dl_start    = [time.time()]
 
         async def download_progress(current, total):
             now = time.time()
             if now - last_update[0] > 2:
                 elapsed = now - dl_start[0]
-                speed = current / elapsed if elapsed > 0 else 0
-                eta = int((total - current) / speed) if speed > 0 else 0
+                speed   = current / elapsed if elapsed > 0 else 0
+                eta     = int((total - current) / speed) if speed > 0 else 0
                 last_update[0] = now
                 pct = int(current / total * 100) if total else 0
                 bar = _progress_bar(pct)
@@ -166,26 +236,40 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
     except asyncio.CancelledError:
         await status_msg.edit_text("⏹ **Download cancelled.**", reply_markup=None)
         _cleanup(file_path)
+        await log_file_upload(
+            client.db.db, user_id, username, first_name,
+            file_name, file_size, active_email, folder_name,
+            success=False, error="cancelled",
+        )
         raise
     except Exception as e:
         logger.error(f"Download error for user {user_id}: {e}")
-        await status_msg.edit_text("❌ Failed to download the file from Telegram.", reply_markup=None)
+        if not await handle_send_error(e, client, user_id, username, first_name):
+            await status_msg.edit_text(
+                "❌ Failed to download the file from Telegram.", reply_markup=None
+            )
         _cleanup(file_path)
+        await log_file_upload(
+            client.db.db, user_id, username, first_name,
+            file_name, file_size, active_email, folder_name,
+            success=False, error=f"download_error: {str(e)[:200]}",
+        )
         return
 
+    # ── Upload ─────────────────────────────────────────────────────────────────
     try:
-        upload_size = os.path.getsize(file_path)
+        upload_size    = os.path.getsize(file_path)
         last_update[0] = time.time()
-        ul_start = time.time()
+        ul_start       = time.time()
 
         async def upload_progress(pct: int):
             now = time.time()
             if now - last_update[0] > 2:
-                elapsed = now - ul_start
+                elapsed    = now - ul_start
                 bytes_done = int(pct / 100 * upload_size)
-                speed = bytes_done / elapsed if elapsed > 0 else 0
-                remaining = upload_size - bytes_done
-                eta = int(remaining / speed) if speed > 0 else 0
+                speed      = bytes_done / elapsed if elapsed > 0 else 0
+                remaining  = upload_size - bytes_done
+                eta        = int(remaining / speed) if speed > 0 else 0
                 last_update[0] = now
                 bar = _progress_bar(pct)
                 try:
@@ -202,7 +286,7 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
                     pass
 
         await status_msg.edit_text(
-            f"**Uploading...**\n`{file_name}`\n"
+            f"**Uploading…**\n`{file_name}`\n"
             f"{drive_display}  →  {folder_display}",
             reply_markup=_cancel_keyboard(user_id),
         )
@@ -213,23 +297,28 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
             file_name=file_name,
             folder_id=folder_id,
             progress_callback=upload_progress,
-            drive_index=active_idx,   # ← explicitly pass drive index
+            drive_index=active_idx,
         )
 
-        link = result.get("webViewLink", "N/A")
+        link       = result.get("webViewLink", "N/A")
         drive_name = result.get("name", file_name)
         drive_size = _fmt_size(int(result.get("size", upload_size)))
-        file_id = result.get("id", "")
+        file_id    = result.get("id", "")
+
+        await log_file_upload(
+            client.db.db, user_id, username, first_name,
+            file_name, upload_size, active_email, folder_name,
+            success=True,
+        )
 
         from handlers.file_manager import _fkey as _fm_fkey, _cb as _fm_cb
-        fk = _fm_fkey(file_id)
+        fk  = _fm_fkey(file_id)
         pfk = _fm_fkey(folder_id) if folder_id else 0
 
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("✏️ Rename", callback_data=_fm_cb("fm", "rename", fk, pfk)),
-                InlineKeyboardButton("🗑 Delete", callback_data=_fm_cb("fm", "del_confirm", fk, pfk)),
+                InlineKeyboardButton("🗑 Delete",  callback_data=_fm_cb("fm", "del_confirm", fk, pfk)),
             ],
             [
                 InlineKeyboardButton("📥 Download", callback_data=_fm_cb("fm", "dl", fk, pfk)),
@@ -249,6 +338,11 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
     except asyncio.CancelledError:
         await status_msg.edit_text("⏹ **Upload cancelled.**", reply_markup=None)
         _cleanup(file_path)
+        await log_file_upload(
+            client.db.db, user_id, username, first_name,
+            file_name, file_size, active_email, folder_name,
+            success=False, error="cancelled",
+        )
         raise
     except PermissionError:
         await status_msg.edit_text(
@@ -256,48 +350,49 @@ async def _do_upload(client: Client, message: Message, user_id: int, file_name: 
             "Your session may have expired. Please /logout and reconnect via /drives.",
             reply_markup=None,
         )
+        await log_file_upload(
+            client.db.db, user_id, username, first_name,
+            file_name, file_size, active_email, folder_name,
+            success=False, error="permission_denied",
+        )
     except Exception as e:
         logger.error(f"Upload error for user {user_id}: {e}")
-        await status_msg.edit_text(
-            f"❌ **Upload failed.**\n\n`{str(e)[:200]}`\n\nPlease try again.",
-            reply_markup=None,
+        if not await handle_send_error(e, client, user_id, username, first_name):
+            await status_msg.edit_text(
+                f"❌ **Upload failed.**\n\n`{str(e)[:200]}`\n\nPlease try again.",
+                reply_markup=None,
+            )
+        await log_file_upload(
+            client.db.db, user_id, username, first_name,
+            file_name, file_size, active_email, folder_name,
+            success=False, error=str(e)[:300],
         )
     finally:
         _cleanup(file_path)
 
 
+# ── formatters ─────────────────────────────────────────────────────────────────
+
 def _fmt_size(size: int) -> str:
-    if size < 1024:
-        return f"{size} B"
-    elif size < 1024 ** 2:
-        return f"{size/1024:.1f} KB"
-    elif size < 1024 ** 3:
-        return f"{size/1024**2:.1f} MB"
+    if size < 1024:        return f"{size} B"
+    elif size < 1024**2:   return f"{size/1024:.1f} KB"
+    elif size < 1024**3:   return f"{size/1024**2:.1f} MB"
     return f"{size/1024**3:.2f} GB"
 
-
 def _fmt_speed(bps: float) -> str:
-    if bps < 1024:
-        return f"{bps:.1f} B/s"
-    elif bps < 1024 ** 2:
-        return f"{bps/1024:.1f} KB/s"
-    elif bps < 1024 ** 3:
-        return f"{bps/1024**2:.2f} MB/s"
+    if bps < 1024:         return f"{bps:.1f} B/s"
+    elif bps < 1024**2:    return f"{bps/1024:.1f} KB/s"
+    elif bps < 1024**3:    return f"{bps/1024**2:.2f} MB/s"
     return f"{bps/1024**3:.2f} GB/s"
 
-
 def _fmt_eta(seconds: int) -> str:
-    if seconds < 60:
-        return f"{seconds}s"
-    elif seconds < 3600:
-        return f"{seconds // 60}m {seconds % 60}s"
+    if seconds < 60:       return f"{seconds}s"
+    elif seconds < 3600:   return f"{seconds // 60}m {seconds % 60}s"
     return f"{seconds // 3600}h {(seconds % 3600) // 60}m"
-
 
 def _progress_bar(pct: int, length: int = 10) -> str:
     filled = int(pct / 100 * length)
     return "▰" * filled + "▱" * (length - filled)
-
 
 def _cleanup(path: str):
     try:

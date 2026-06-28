@@ -385,8 +385,31 @@ class GoogleDriveManager:
             request = svc.files().create(body=file_metadata, media_body=media, fields="id, name, webViewLink, size")
             response = None
             last_pct = -1
+            retries = 0
+            max_retries = 5
             while response is None:
-                status, response = request.next_chunk()
+                try:
+                    status, response = request.next_chunk()
+                except (BrokenPipeError, ConnectionError, OSError, HttpError) as e:
+                    # Transient network errors (broken pipe, reset connections,
+                    # 5xx from Drive) are expected occasionally on resumable
+                    # uploads. google-api-python-client's resumable upload
+                    # tracks how many bytes were actually committed, so
+                    # calling next_chunk() again resumes from where it left
+                    # off rather than restarting the whole upload. Retrying
+                    # here (with a short backoff) is the fix recommended by
+                    # Google's own resumable-upload docs and avoids surfacing
+                    # a hard failure to the user for a one-off network blip.
+                    retries += 1
+                    if retries > max_retries:
+                        raise
+                    wait = min(2 ** retries, 30)
+                    logger.warning(
+                        f"Upload chunk error for {file_name!r} (attempt "
+                        f"{retries}/{max_retries}): {e}. Retrying in {wait}s."
+                    )
+                    time.sleep(wait)
+                    continue
                 if status and progress_callback:
                     pct = int(status.progress() * 100)
                     if pct != last_pct:
