@@ -28,7 +28,7 @@ def register(app: Client):
 
     @app.on_message(
         filters.private & filters.text
-        & ~filters.command(["start", "logout", "help", "drives", "auth", "storage", "search", "setpassword"]),
+        & ~filters.command(["start", "logout", "help", "drives", "auth", "storage", "search", "webui"]),
         group=0
     )
     async def code_handler(client: Client, message: Message):

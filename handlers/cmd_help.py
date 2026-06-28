@@ -29,7 +29,7 @@ Send any file — it uploads to your active Drive (or default folder if set).
 
 HELP_TEXT_WEBUI = """
 **🌐 Web Dashboard**
-  • /setpassword `password` — set your WebUI login password
+  • /webui — manage WebUI login credentials (username & password)
   • Then open: {webui_url}
   • Log in with your password to manage files in your browser
 """

@@ -537,14 +537,11 @@ def register(app: Client):
 
     @app.on_message(
         filters.private & filters.text
-        & ~filters.command(["start", "logout", "help", "drives", "auth", "storage", "search"]),
+        & ~filters.command(["start", "logout", "help", "drives", "auth", "storage", "search", "webui"]),
         group=1
     )
     async def fm_text_input(client: Client, message: Message):
         user_id = message.from_user.id
-
-        if await client.db.is_awaiting_code(user_id):
-            return
 
         pending = _pending_input.get(user_id)
         if not pending:

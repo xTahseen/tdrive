@@ -72,7 +72,7 @@ async def main():
         BotCommand("help",    "Show help"),
     ]
     if Config.WEBUI_ENABLED:
-        commands.append(BotCommand("setpassword", "Set WebUI login password"))
+        commands.append(BotCommand("webui", "Manage WebUI login credentials"))
 
     await app.set_bot_commands(commands)
     logger.info("Bot commands synced with Telegram.")

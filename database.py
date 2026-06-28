@@ -52,6 +52,8 @@ class Database:
             [("created_at", ASCENDING)],
             expireAfterSeconds=600
         )
+        await self.db.share_links.create_index([("token", ASCENDING)], unique=True)
+        await self.db.share_links.create_index([("file_id", ASCENDING)])
         logger.info("Database indexes ensured.")
 
     async def close(self):
@@ -320,27 +322,6 @@ class Database:
     async def delete_oauth_state(self, user_id: int):
         await self.db.oauth_states.delete_one({"user_id": user_id})
 
-    # ── awaiting_code flag ─────────────────────────────────────────────────────
-
-    async def set_awaiting_code(self, user_id: int):
-        await self.db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"awaiting_code": True}},
-            upsert=True,
-        )
-        await self._invalidate(user_id)
-
-    async def is_awaiting_code(self, user_id: int) -> bool:
-        doc = await self._get_doc(user_id)
-        return bool(doc and doc.get("awaiting_code"))
-
-    async def clear_awaiting_code(self, user_id: int):
-        await self.db.users.update_one(
-            {"user_id": user_id},
-            {"$unset": {"awaiting_code": ""}},
-        )
-        await self._invalidate(user_id)
-
     # ── migration helper ───────────────────────────────────────────────────────
 
     async def migrate_legacy_tokens(self):
@@ -371,34 +352,49 @@ class Database:
         if count:
             logger.info(f"migrate_legacy_tokens: fixed {count} document(s).")
 
-    # ── WebUI password & session ───────────────────────────────────────────────
+    # ── WebUI credentials (username + password) ────────────────────────────────
 
-    async def set_webui_password(self, hashed: str, user_id: int = None):
-        """Store hashed WebUI password (and optionally the owner's Telegram user_id)."""
+    async def set_webui_credentials(
+        self, hashed_username: str, hashed_password: str, user_id: int = None
+    ):
+        """Store hashed WebUI username and password (and optionally the owner's Telegram user_id)."""
         update_fields = {
-            "value": hashed,
-            "updated_at": __import__("datetime").datetime.utcnow(),
+            "hashed_username": hashed_username,
+            "hashed_password": hashed_password,
+            "updated_at": datetime.utcnow(),
         }
         if user_id is not None:
             update_fields["user_id"] = user_id
         await self.db.settings.update_one(
-            {"key": "webui_password"},
+            {"key": "webui_credentials"},
             {"$set": update_fields},
             upsert=True,
         )
 
-    async def get_webui_password(self) -> str | None:
-        doc = await self.db.settings.find_one({"key": "webui_password"})
-        return doc["value"] if doc else None
+    async def get_webui_credentials(self) -> tuple[str | None, str | None]:
+        """Return (hashed_username, hashed_password) or (None, None) if not set."""
+        doc = await self.db.settings.find_one({"key": "webui_credentials"})
+        if not doc:
+            return None, None
+        return doc.get("hashed_username"), doc.get("hashed_password")
+
+    async def has_webui_credentials(self) -> bool:
+        """Return True if credentials have been configured."""
+        u, p = await self.get_webui_credentials()
+        return u is not None and p is not None
+
+    async def clear_webui_credentials(self):
+        """Remove WebUI credentials entirely, disabling login."""
+        await self.db.settings.delete_one({"key": "webui_credentials"})
 
     async def get_webui_owner_id(self) -> int | None:
-        """Return the Telegram user_id of whoever set the WebUI password."""
-        doc = await self.db.settings.find_one({"key": "webui_password"})
+        """Return the Telegram user_id of whoever set the WebUI credentials."""
+        doc = await self.db.settings.find_one({"key": "webui_credentials"})
         return doc.get("user_id") if doc else None
 
     async def get_first_user_id(self) -> int | None:
         """Return the first user_id found in the DB (for session binding).
-        Falls back through: webui_password owner -> users collection."""
+        Falls back through: webui_credentials owner -> users collection."""
         owner = await self.get_webui_owner_id()
         if owner:
             return owner
@@ -411,3 +407,54 @@ class Database:
         async for doc in self.db.users.find({}, {"user_id": 1}):
             ids.append(doc["user_id"])
         return ids
+
+    # ── Share links ────────────────────────────────────────────────────────────
+
+    async def create_share_link(
+        self,
+        token: str,
+        file_id: str,
+        file_name: str,
+        mime_type: str,
+        is_folder: bool,
+        user_id: int,
+        drive_index: int,
+        password_hash: str | None = None,
+    ) -> dict:
+        """Store a new share link. Returns the document."""
+        doc = {
+            "token": token,
+            "file_id": file_id,
+            "file_name": file_name,
+            "mime_type": mime_type,
+            "is_folder": is_folder,
+            "user_id": user_id,
+            "drive_index": drive_index,
+            "password_hash": password_hash,
+            "created_at": datetime.utcnow(),
+        }
+        await self.db.share_links.insert_one(doc)
+        return doc
+
+    async def get_share_link(self, token: str) -> dict | None:
+        """Fetch a share link by token."""
+        return await self.db.share_links.find_one({"token": token})
+
+    async def delete_share_link(self, token: str):
+        """Remove a share link by token."""
+        await self.db.share_links.delete_one({"token": token})
+
+    async def get_share_links_for_file(self, file_id: str) -> list[dict]:
+        """Return all share links for a given Drive file_id."""
+        cursor = self.db.share_links.find({"file_id": file_id})
+        return [doc async for doc in cursor]
+
+    async def get_all_share_links(self, user_id: int) -> list[dict]:
+        """Return all share links created by a user."""
+        cursor = self.db.share_links.find({"user_id": user_id})
+        return [doc async for doc in cursor]
+
+    async def ensure_share_index(self):
+        """Create index on share_links.token (unique)."""
+        await self.db.share_links.create_index([("token", ASCENDING)], unique=True)
+        await self.db.share_links.create_index([("file_id", ASCENDING)])

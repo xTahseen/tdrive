@@ -54,7 +54,11 @@ def require_auth(handler):
         if not payload:
             if request.path.startswith("/api/"):
                 raise web.HTTPUnauthorized(reason="Not authenticated")
-            raise web.HTTPFound("/")
+            # Preserve the original URL so login can redirect back to it
+            original = request.path
+            if request.query_string:
+                original += "?" + request.query_string
+            raise web.HTTPFound("/?next=" + urllib.parse.quote(original, safe=""))
         request["uid"] = payload["uid"]
         return await handler(request)
     return wrapper
@@ -100,6 +104,10 @@ def _icon(name: str, size: int = 20, cls: str = "", bg_color: str = None) -> str
         "login_arrow":  '<path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
         "lock":         '<path d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
         "link":         '<path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+        "share":        '<path d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+        "globe":        '<path d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+        "eye":          '<path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+        "unshare":      '<path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     }
     path = icons.get(name, icons["file"])
     svg = f'<svg{cls_attr} width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">{path}</svg>'
@@ -107,19 +115,39 @@ def _icon(name: str, size: int = 20, cls: str = "", bg_color: str = None) -> str
         return f'<div class="icon-bg" style="background-color:{bg_color}">{svg}</div>'
     return svg
 
-def _file_icon(mime: str, size: int = 20) -> str:
-    if not mime: return _icon("file", size, "", "#607d8b")  # Gray for unknown
-    if "folder" in mime: return _icon("folder", size, "", "#0386c3")  # Blue
-    if "image" in mime: return _icon("image", size, "", "#a78bfa")  # Purple (no background for images)
-    if "video" in mime: return _icon("video", size, "", "#f87171")  # Red (no background for videos)
-    if "audio" in mime: return _icon("audio", size, "", "#e55835")  # Orange-red
-    if "pdf" in mime: return _icon("pdf", size, "", "#e53e3e")  # Red (no background)
-    if "zip" in mime or "tar" in mime or "rar" in mime or "7z" in mime: return _icon("zip", size, "", "#795547")  # Brown
-    if "word" in mime or "document" in mime: return _icon("doc", size, "", "#3f51b5")  # Deep blue
-    if "sheet" in mime or "excel" in mime: return _icon("sheet", size, "", "#38a169")  # Green (no background)
-    if "presentation" in mime or "powerpoint" in mime: return _icon("sheet", size, "", "#38a169")  # Green (no background)
-    if "javascript" in mime or "json" in mime or "python" in mime or "html" in mime or "css" in mime: return _icon("code", size, "", "#60a5fa")  # Blue (no background)
-    return _icon("file", size, "", "#607d8b")  # Gray for unknown
+def _file_icon(mime: str, size: int = 20, file_name: str = "") -> str:
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    mime = mime or ""
+    if not mime and not ext: return _icon("file", size, "", "#607d8b")
+    if "folder" in mime: return _icon("folder", size, "", "#0386c3")
+    if "image" in mime or ext in {"jpg","jpeg","png","gif","webp","svg","bmp","ico","tiff"}: return _icon("image", size, "", "#a78bfa")
+    if "video" in mime or ext in {"mp4","mkv","avi","mov","wmv","webm","flv","m4v"}: return _icon("video", size, "", "#f87171")
+    if "audio" in mime or ext in {"mp3","wav","ogg","flac","aac","m4a","wma"}: return _icon("audio", size, "", "#e55835")
+    if "pdf" in mime or ext == "pdf": return _icon("pdf", size, "", "#e53e3e")
+    if "zip" in mime or "tar" in mime or "rar" in mime or "7z" in mime or ext in {"zip","tar","gz","bz2","xz","rar","7z","tgz"}: return _icon("zip", size, "", "#795547")
+    if "word" in mime or "document" in mime or ext in {"doc","docx","odt","rtf"}: return _icon("doc", size, "", "#3f51b5")
+    if "sheet" in mime or "excel" in mime or ext in {"xls","xlsx","ods","csv"}: return _icon("sheet", size, "", "#38a169")
+    if "presentation" in mime or "powerpoint" in mime or ext in {"ppt","pptx","odp"}: return _icon("sheet", size, "", "#38a169")
+    if "javascript" in mime or "json" in mime or "python" in mime or "html" in mime or "css" in mime or ext in {"js","ts","json","py","html","htm","css","c","cpp","h","java","go","rs","rb","php","sh","bat","yaml","yml","xml","md","txt"}: return _icon("code", size, "", "#60a5fa")
+    return _icon("file", size, "", "#607d8b")
+
+_SHARE_TXT_EXTS = {"txt","md","py","js","ts","json","yaml","yml","toml","ini","cfg","csv",
+                   "html","htm","xml","sh","bat","log","css","c","cpp","h","java","go","rs","rb","php","swift","kt"}
+
+def _get_share_preview_kind(mime: str, file_name: str = "") -> str | None:
+    """Return 'image'|'video'|'audio'|'text'|None for a file on the public share page,
+    based on mime type (falling back to extension for generic/octet-stream mimes)."""
+    mime = mime or ""
+    if "image" in mime: return "image"
+    if "video" in mime: return "video"
+    if "audio" in mime: return "audio"
+    if "pdf" in mime: return None  # served via inline iframe, not the JS player
+    if mime.startswith("text/") or "json" in mime or "javascript" in mime or "xml" in mime:
+        return "text"
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    if ext in _SHARE_TXT_EXTS:
+        return "text"
+    return None
 
 _CSS = """
 :root {
@@ -170,6 +198,36 @@ a { color: var(--accent); text-decoration: none; }
 .ico-zip    { color: white; }
 .ico-code   { color: white; }
 
+/* Thumbnail support */
+.fi-thumb {
+  width: 46px; height: 46px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+  background: var(--surface3);
+  display: block;
+}
+.fi-thumb-wrap {
+  position: relative; width: 46px; height: 46px; flex-shrink: 0;
+  border-radius: 50%; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.fi-thumb-play {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.38); border-radius: 50%;
+  pointer-events: none;
+}
+.fi-thumb-play svg { color: #fff; }
+.sri-thumb-wrap {
+  position: relative; width: 46px; height: 46px; flex-shrink: 0;
+  border-radius: 50%; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.sri-thumb {
+  width: 46px; height: 46px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+  background: var(--surface3);
+  display: block;
+}
+
 /* Progress bar */
 #bar {
   position: fixed; top: 0; left: 0; right: 0; height: 3px;
@@ -213,6 +271,13 @@ a { color: var(--accent); text-decoration: none; }
   justify-content: center; display: inline-flex; align-items: center;
 }
 .btn-icon:hover { background: var(--surface3); color: var(--text); }
+.sri-dl-btn {
+  flex-shrink: 0; width: 38px; height: 38px; display: flex;
+  align-items: center; justify-content: center;
+  color: var(--accent); border-radius: var(--r8);
+  transition: background .12s;
+}
+.sri-dl-btn:hover { background: var(--surface3); }
 .btn-sm { height: 34px; padding: 0 13px; font-size: 13px; }
 .btn-wide { width: 100%; justify-content: center; }
 
@@ -417,6 +482,7 @@ nav {
 /* File list */
 .file-area { flex: 1; overflow-y: auto; padding-bottom: 100px; }
 
+
 /* File item row — mobile-first card style */
 .file-item {
   display: flex; align-items: center; gap: 16px;
@@ -526,7 +592,38 @@ body.select-mode .sri-cb { display: flex; }
   .file-item:hover .fi-act { opacity: 1; pointer-events: auto; }
 }
 
-/* Empty state */
+.fi-shared-badge{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;color:var(--accent);flex-shrink:0;margin-left:6px}
+.fi-shared-badge svg{width:13px;height:13px}
+.fi-name-row{display:flex;align-items:flex-start;min-width:0}
+.fi-name-row .fi-name{flex:1;min-width:0}
+.fi-name-row .fi-shared-badge{margin-top:3px}
+#fab-share{display:none}
+body.select-mode.share-eligible #fab-share{display:flex}
+.share-status{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--r12);background:var(--surface2);border:1px solid var(--border);margin-bottom:16px}
+.share-status-icon{width:38px;height:38px;border-radius:50%;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.share-status.off .share-status-icon{background:var(--surface3);color:var(--text3)}
+.share-status-text{flex:1;min-width:0}
+.share-status-title{font-size:14px;font-weight:600;color:var(--text)}
+.share-status-sub{font-size:12px;color:var(--text3);margin-top:1px}
+.switch{position:relative;width:42px;height:24px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.switch-track{position:absolute;inset:0;background:var(--surface3);border:1px solid var(--border2);border-radius:99px;cursor:pointer;transition:all .18s}
+.switch-track::after{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:2px;left:2px;transition:all .18s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.switch input:checked+.switch-track{background:var(--accent)}
+.switch input:checked+.switch-track::after{transform:translateX(18px)}
+.share-link-row{display:flex;gap:8px;margin-bottom:14px}
+.share-link-row input{flex:1;font-size:13px;color:var(--text2);background:var(--surface3)}
+.share-pw-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.share-pw-row .lbl{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}
+#share-pw-field{margin-top:10px;display:none}
+.share-spub-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg)}
+.spub-card{background:var(--header);border:1px solid var(--border2);border-radius:var(--r16);padding:36px 30px;width:100%;max-width:400px;box-shadow:var(--shadow);text-align:center}
+.spub-icon{width:60px;height:60px;border-radius:50%;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 18px}
+.spub-name{font-size:17px;font-weight:700;color:var(--text);word-break:break-word;margin-bottom:6px}
+.spub-meta{font-size:13px;color:var(--text3);margin-bottom:22px}
+.spub-browse{max-width:640px;margin:0 auto;padding:20px}
+
+
 .empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 80px 24px; gap: 16px; color: var(--text3);
@@ -671,6 +768,13 @@ body.select-mode #fab { bottom: 96px; }
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   transition: background .15s, color .15s;
 }
+#preview-back-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255,255,255,0.08); color: var(--text2);
+  display: none; align-items: center; justify-content: center; flex-shrink: 0;
+  text-decoration: none; transition: background .15s, color .15s;
+}
+#preview-back-btn:hover { background: rgba(255,255,255,0.16); color: var(--text); }
 #preview-close-btn:hover { background: rgba(239,68,68,.25); color: #ef4444; }
 #preview-body {
   flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center;
@@ -1140,7 +1244,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })
   );
-  if (typeof navRoot === 'function') navRoot();
+  if (typeof navRoot === 'function') {
+    _restoreFromURL();
+    renderBC();
+    // Read file params BEFORE _replaceURL() strips them from the URL
+    const params = new URLSearchParams(window.location.search);
+    const fileId = params.get('file');
+    const fileName = params.get('fname') || '';
+    const fileMime = params.get('fmime') || '';
+    _replaceURL();
+    if (fileId) {
+      load().then(() => {
+        const f = files.find(x => x.id === fileId);
+        openPreviewSilent(f ? f.id : fileId, f ? f.mimeType : fileMime, f ? f.name : fileName);
+      }).catch(() => {});
+    } else {
+      load();
+    }
+  }
 });
 """
 
@@ -1172,24 +1293,37 @@ async def handle_login(request: web.Request) -> web.Response:
     if tok and _verify(tok):
         raise web.HTTPFound("/drives")
 
+    # Capture ?next= param for post-login redirect
+    next_url = request.rel_url.query.get("next", "")
+    # Validate next_url: must be a relative path starting with /
+    if not next_url or not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/drives"
+
     error = ""
     if request.method == "POST":
         data = await request.post()
-        pw = data.get("password", "")
+        username = data.get("username", "")
+        password = data.get("password", "")
+        # Also read next from hidden form field
+        post_next = data.get("next", "")
+        if post_next and post_next.startswith("/") and not post_next.startswith("//"):
+            next_url = post_next
         db: Database = request.app["db"]
-        stored = await db.get_webui_password()
-        if stored and _hash_pw(pw) == stored:
+        stored_u, stored_p = await db.get_webui_credentials()
+        if stored_u and stored_p and _hash_pw(username) == stored_u and _hash_pw(password) == stored_p:
             uid = await db.get_first_user_id()
             if uid is None:
                 error = "No Telegram user found. Send /start to the bot first."
             else:
-                resp = web.HTTPFound("/drives")
+                resp = web.HTTPFound(next_url)
                 resp.set_cookie("session", _make_token(uid), max_age=86400*7, httponly=True, samesite="Lax")
                 raise resp
         else:
-            error = "Incorrect password."
+            error = "Incorrect username or password."
 
     err_html = f'<div class="lerr">{_icon("alert",16)} {error}</div>' if error else ""
+    # Pass next_url into the form as a hidden field
+    next_field = f'<input type="hidden" name="next" value="{next_url}">' if next_url and next_url != "/drives" else ""
     return _page(f"""
 <div class="lp">
   <div class="lcard">
@@ -1200,15 +1334,20 @@ async def handle_login(request: web.Request) -> web.Response:
     </div>
     {err_html}
     <form method="POST">
+      {next_field}
+      <div class="fg">
+        <label>Username</label>
+        <input name="username" type="text" placeholder="Enter your username" autofocus autocomplete="username">
+      </div>
       <div class="fg">
         <label>Password</label>
-        <input name="password" type="password" placeholder="Enter your password" autofocus autocomplete="current-password">
+        <input name="password" type="password" placeholder="Enter your password" autocomplete="current-password">
       </div>
       <button type="submit" class="btn btn-primary btn-wide" style="height:46px;margin-top:8px;font-size:16px">
         {_icon("login_arrow",18)} Sign In
       </button>
     </form>
-    <p class="lhint">Set password via Telegram:<br><code>/setpassword <pass></code></p>
+    <p class="lhint">Set credentials via Telegram @GDriveVIPbot using the "/webui" command.</p>
   </div>
 </div>""", "Sign in")
 
@@ -1430,6 +1569,9 @@ async def handle_browser(request: web.Request) -> web.Response:
 <!-- Floating Action Button -->
 <div id="fab">
   <div id="fab-opts" class="fab-options" style="display:none"></div>
+  <button class="fab-main" id="fab-share" onclick="selShare()" title="Share">
+    {_icon("share", 24)}
+  </button>
   <button class="fab-main" id="fab-btn" onclick="toggleFab()" title="New">
     {_icon("plus", 26)}
   </button>
@@ -1527,11 +1669,43 @@ async def handle_browser(request: web.Request) -> web.Response:
   <div class="macts"><button class="btn btn-ghost btn-sm" onclick="clearSel();closeModal('search')">Close</button></div>
 </div></div>
 
+<!-- Share modal -->
+<div class="moverlay" id="m-share"><div class="modal">
+  <div class="modal-title">{_icon("share",18)} Share
+    <span id="share-item-icon" style="margin-left:auto;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--surface2);flex-shrink:0"></span>
+  </div>
+  <div style="font-size:13px;color:var(--text2);margin:-10px 0 14px;word-break:break-word" id="share-item-name"></div>
+  <div class="share-status off" id="share-status-box"></div>
+  <div class="share-pw-row" id="share-enable-row">
+    <span class="lbl">{_icon("globe",16)} Anyone with the link</span>
+    <label class="switch"><input type="checkbox" id="share-enable-toggle" onchange="shareTogglePublic(this.checked)"><span class="switch-track"></span></label>
+  </div>
+  <div class="share-pw-row">
+    <span class="lbl">{_icon("lock",16)} Require password</span>
+    <label class="switch"><input type="checkbox" id="share-pw-toggle" onchange="sharePwToggleChanged(this.checked)"><span class="switch-track"></span></label>
+  </div>
+  <div class="fg" id="share-pw-field">
+    <label>Password</label>
+    <div style="display:flex;gap:8px">
+      <input id="share-pw-input" type="text" placeholder="Enter a password" autocomplete="off" oninput="sharePwInputChanged()">
+      <button id="share-pw-save-btn" class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="shareSavePassword()">Save</button>
+    </div>
+  </div>
+  <div class="share-link-row" id="share-link-row" style="display:none">
+    <input id="share-link-input" type="text" readonly>
+    <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="shareCopyLink()">{_icon("copy",16)} Copy</button>
+  </div>
+  <div class="macts">
+    <button class="btn btn-danger btn-sm" id="share-clear-btn" style="margin-right:auto;display:none" onclick="shareClearLink()">{_icon("delete",15)} Clear link</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal('share')">Done</button>
+  </div>
+</div></div>
 <!-- ── Preview overlay ── -->
 <div id="preview-overlay">
   <div id="preview-bar">
     <button id="preview-close-btn" onclick="closePreview()" title="Close">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+
     </button>
     <span id="preview-title"></span>
     <button id="preview-copy-btn" onclick="previewCopyText()" title="Copy text">
@@ -1565,6 +1739,9 @@ async def handle_browser(request: web.Request) -> web.Response:
   data-move='{_icon("move",20).replace("'","&#39;")}'
   data-del='{_icon("delete",20).replace("'","&#39;")}'
   data-copy='{_icon("copy",20).replace("'","&#39;")}'
+  data-globe='{_icon("globe",18).replace("'","&#39;")}'
+  data-share='{_icon("share",18).replace("'","&#39;")}'
+  data-link='{_icon("link",18).replace("'","&#39;")}'
 ></div>
 
 <script>
@@ -1589,6 +1766,7 @@ function getIco(m) {{
 }}
 
 let folder='root', stack=[], files=[], sel=new Set();
+let _sharedIds=new Set();
 let renameId=null, renameIds=[], delIds=[], moveIds=[], copyIds=[];
 let uploadQ=[];
 let fabOpen=false;
@@ -1600,22 +1778,81 @@ function sz(b){{if(!b||isNaN(b))return'—';b=+b;if(b<1024)return b+' B';if(b<10
 function dt(s){{if(!s)return'—';const d=new Date(s),now=new Date(),diff=now-d;if(diff<86400000)return d.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});if(diff<604800000)return d.toLocaleDateString([],{{weekday:'short',month:'short',day:'numeric'}});return d.toLocaleDateString([],{{year:'numeric',month:'short',day:'numeric'}})}}
 function isFol(f){{return f.mimeType&&f.mimeType.includes('folder')}}
 
-function navRoot(){{folder='root';stack=[];renderBC();load();document.querySelector('.sb-item')?.classList.add('active')}}
+// ── URL sync helpers ──────────────────────────────────────────────────────────
+function _folderParams(){{
+  const p=new URLSearchParams();
+  if(folder!=='root')p.set('folder',folder);
+  if(stack.length)p.set('stack',JSON.stringify(stack));
+  return p;
+}}
+function _pushURL(){{
+  const params=_folderParams();
+  const qs=params.toString();
+  const url=window.location.pathname+(qs?'?'+qs:'');
+  history.pushState({{folder,stack,file:null}},'',url);
+}}
+function _replaceURL(){{
+  const params=_folderParams();
+  const qs=params.toString();
+  const url=window.location.pathname+(qs?'?'+qs:'');
+  history.replaceState({{folder,stack,file:null}},'',url);
+}}
+function _pushFileURL(id,mime,name){{
+  const params=_folderParams();
+  params.set('file',id);
+  params.set('fname',name||'');
+  params.set('fmime',mime||'');
+  const url=window.location.pathname+'?'+params.toString();
+  history.pushState({{folder,stack,file:{{id,mime,name}}}},'',url);
+}}
+function _restoreFromURL(){{
+  const params=new URLSearchParams(window.location.search);
+  folder=params.get('folder')||'root';
+  try{{stack=params.get('stack')?JSON.parse(params.get('stack')):[];}}catch(e){{stack=[];}}
+}}
+
+function navRoot(){{folder='root';stack=[];renderBC();_replaceURL();load();_loadSharedIds();document.querySelector('.sb-item')?.classList.add('active')}}
 function navFolder(id,name){{
   folder=id;
   const i=stack.findIndex(x=>x.id===id);
   if(i>=0)stack=stack.slice(0,i+1);
   else stack.push({{id,name}});
-  renderBC();load();
+  renderBC();_pushURL();load();_loadSharedIds();
 }}
 function goBack(){{
   if(stack.length===0)return;
   stack.pop();
-  if(stack.length===0){{folder='root';renderBC();load()}}
-  else{{const s=stack[stack.length-1];folder=s.id;renderBC();load()}}
+  if(stack.length===0){{folder='root';renderBC();_replaceURL();load()}}
+  else{{const s=stack[stack.length-1];folder=s.id;renderBC();_replaceURL();load()}}
 }}
 function switchDrive(i){{window.location.href='/drive/'+i}}
 function refresh(){{load()}}
+
+// Browser back/forward button support
+window.addEventListener('popstate',function(e){{
+  // Close preview if currently open (going back from a file)
+  const ov=document.getElementById('preview-overlay');
+  if(ov&&ov.classList.contains('open')){{
+    _closePreviewSilent();
+  }}
+  if(e.state&&e.state.folder!==undefined){{
+    folder=e.state.folder;
+    stack=e.state.stack||[];
+    if(e.state.file){{
+      // Navigated forward to a file — re-open preview
+      renderBC();
+      // Ensure files are loaded first, then open preview
+      const f=files.find(x=>x.id===e.state.file.id);
+      if(f){{openPreviewSilent(f.id,f.mimeType,f.name);}}
+      else{{load().then(()=>{{const f2=files.find(x=>x.id===e.state.file.id);if(f2)openPreviewSilent(f2.id,f2.mimeType,f2.name);}}).catch(()=>{{}});}}
+    }}else{{
+      renderBC();load();
+    }}
+  }}else{{
+    _restoreFromURL();
+    renderBC();load();
+  }}
+}});
 
 function renderBC(){{
   let h=`<span class="bc-crumb" onclick="navRoot()">My Drive</span>`;
@@ -1697,29 +1934,58 @@ async function _loadMore(){{
   _loading=false;
 }}
 
+function _thumbAreaHTML(f){{
+  const m=f.mimeType||'';
+  const isText=m.startsWith('text/')||m.includes('json')||m.includes('javascript')||m.includes('xml')||m.includes('python')||m.includes('html')||m.includes('css');
+  if(f.thumbnailLink&&!isText){{
+    const isVideo=m.includes('video');
+    const isAudio=m.includes('audio');
+    const playOverlay=(isVideo||isAudio)
+      ?'<div class="fi-thumb-play"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>'
+      :'';
+    return(
+      `<div class="fi-thumb-wrap" id="tw-${{f.id}}">`+
+        `<img class="fi-thumb" src="${{f.thumbnailLink}}" alt="" loading="lazy"`+
+          ` onerror="var w=document.getElementById('tw-${{f.id}}');if(w){{w.style.display='none';var fb=document.getElementById('fb-${{f.id}}');if(fb)fb.style.display='flex';}}"`+
+        `>${{playOverlay}}`+
+      `</div>`+
+      `<div class="fi-icon" id="fb-${{f.id}}" style="display:none">${{getIco(f.mimeType)}}</div>`
+    );
+  }}
+  return `<div class="fi-icon">${{getIco(f.mimeType)}}</div>`;
+}}
+
 function _fileItemHTML(f){{
   const isF=isFol(f);
   const nm=f.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const selcls=sel.has(f.id)?' sel':'';
   const chkCls=sel.has(f.id)?'custom-cb checked':'custom-cb';
   const sizeStr=isF?'Directory':sz(f.size);
+  const isShared=_sharedIds.has(f.id);
+  const shareBadge=isShared
+    ?`<span class="fi-shared-badge" title="Public link active">${{IC.link}}</span>`
+    :'';
+  const mediaArea=isF?`<div class="fi-icon">${{getIco(f.mimeType)}}</div>`:_thumbAreaHTML(f);
   return`<div class="file-item${{selcls}}" data-id="${{f.id}}" data-name="${{nm}}" data-fol="${{isF}}"
       onclick="itemClick(event,'${{f.id}}')"
       oncontextmenu="event.preventDefault();longPress('${{f.id}}')"
-      ontouchstart="startLong(event,'${{f.id}}')" ontouchend="endLong()" ontouchmove="endLong()">
+      ontouchstart="startLong(event,'${{f.id}}')\" ontouchend="endLong()" ontouchmove="endLong()">
     <div class="fi-cb" onclick="event.stopPropagation();toggleSelCustom('${{f.id}}',this.querySelector('.custom-cb'))">
       <div class="${{chkCls}}"></div>
     </div>
-    <div class="fi-icon">${{getIco(f.mimeType)}}</div>
+    ${{mediaArea}}
     <div class="fi-info">
-      <div class="fi-name${{isF?' fol':''}}">${{f.name}}</div>
+      <div class="fi-name-row">
+        <div class="fi-name${{isF?' fol':''}}">${{f.name}}</div>
+        ${{shareBadge}}
+      </div>
       <div class="fi-meta">
         <span class="fi-size">${{sizeStr}}</span>
         <span class="fi-date">${{dt(f.modifiedTime)}}</span>
       </div>
     </div>
     ${{!isF?`<button class="btn-icon fi-act" title="Download" onclick="event.stopPropagation();dlFile('${{f.id}}')">
-      ${{IC.dl}}</button>`:''}}
+      ${{IC.dl}}</button>`:''}}\
   </div>`;
 }}
 
@@ -1768,7 +2034,15 @@ function _getSiblingFiles(mime){{
   return [];
 }}
 
+function openPreviewSilent(id,mime,name){{
+  // Open preview without pushing to history (used by popstate restore)
+  _openPreviewCore(id,mime,name);
+}}
 function openPreview(id,mime,name){{
+  _pushFileURL(id,mime||'',name||'');
+  _openPreviewCore(id,mime,name);
+}}
+function _openPreviewCore(id,mime,name){{
   _pvId=id;
   const ov=document.getElementById('preview-overlay');
   document.getElementById('preview-title').textContent=name||'Preview';
@@ -2348,7 +2622,8 @@ function _clearPreviewBody(body,spinner){{
   spinner.style.display='flex';
 }}
 
-function closePreview(){{
+function _closePreviewSilent(){{
+  // Close preview without touching history (used by popstate)
   const ov=document.getElementById('preview-overlay');
   ov.classList.remove('open');
   document.getElementById('preview-copy-btn').classList.remove('visible');
@@ -2360,6 +2635,17 @@ function closePreview(){{
   [...body.children].forEach(c=>{{if(c!==spinner)c.remove();}});
   spinner.style.display='none';
   _pvId=null;
+}}
+function closePreview(){{
+  // If URL has ?file=, go back (popstate will call _closePreviewSilent)
+  // If preview was opened without a URL push (e.g. search result), close silently and replace URL
+  const params=new URLSearchParams(window.location.search);
+  if(params.has('file')){{
+    history.back();
+  }}else{{
+    _closePreviewSilent();
+    _replaceURL();
+  }}
 }}
 
 function previewDownload(){{
@@ -2414,6 +2700,7 @@ function updateSel(){{
   const b=document.getElementById('selbar');
   document.getElementById('selcnt').textContent=sel.size+' selected';
   b.classList.toggle('show',sel.size>0);
+  document.body.classList.toggle('share-eligible',sel.size===1);
   if(sel.size===0){{
     document.body.classList.remove('select-mode');
   }}
@@ -2440,6 +2727,188 @@ function _restoreSearchZ(){{
 }}
 
 function selDl(){{[...sel].forEach(id=>window.open(`/api/download/${{id}}?drive=${{DI}}`,'_blank'))}}
+
+function selShare(){{
+  if(sel.size!==1){{toast('Select exactly one file or folder to share','err');return;}}
+  const id=[...sel][0];
+  const row=document.querySelector(`.file-item[data-id="${{id}}"]`);
+  const name=row?row.dataset.name:'';
+  const isFolder=row?row.dataset.fol==='true':false;
+  openShareModal(isFolder?'folder':'file', id, name);
+}}
+
+// ─── Share / Public link ──────────────────────────────────────────────────────
+var _shareType=null, _shareId=null, _shareData=null;
+
+function openShareModal(type, id, name){{
+  _shareType=type; _shareId=id; _shareData=null;
+  document.getElementById('share-item-name').textContent=name||id;
+  var itemIcon=document.getElementById('share-item-icon');
+  itemIcon.style.background=type==='folder'?'rgba(3,134,195,0.15)':'var(--surface2)';
+  itemIcon.style.color=type==='folder'?'#0386c3':'var(--text3)';
+  itemIcon.innerHTML=type==='folder'
+    ?IC.folder.replace(/width="\d+" height="\d+"/,'width="18" height="18"')
+    :IC.file.replace(/width="\d+" height="\d+"/,'width="18" height="18"');
+  document.getElementById('share-pw-input').value='';
+  document.getElementById('share-pw-input').placeholder='Enter a password';
+  document.getElementById('share-pw-input').dataset.hasSaved='';
+  document.getElementById('share-pw-field').style.display='none';
+  document.getElementById('share-pw-toggle').checked=false;
+  _updateSharePwBtn(false);
+  _renderShareStatus(null,true);
+  openModal('share');
+  _loadShareStatus();
+}}
+
+function openShare(id,name){{
+  const row=document.querySelector(`.file-item[data-id="${{id}}"]`);
+  const isFolder=row?row.dataset.fol==='true':false;
+  openShareModal(isFolder?'folder':'file', id, name);
+}}
+
+function _renderShareStatus(d,loading){{
+  var box=document.getElementById('share-status-box');
+  var linkRow=document.getElementById('share-link-row');
+  if(loading){{
+    box.className='share-status off';
+    box.innerHTML='<div class="share-status-icon">'+IC.globe+'</div><div class="share-status-text"><div class="share-status-title">Checking\u2026</div></div>';
+    linkRow.style.display='none';
+    return;
+  }}
+  var active=d&&d.active;
+  document.getElementById('share-enable-toggle').checked=!!active;
+  document.getElementById('share-pw-toggle').checked=!!(d&&d.has_password);
+  document.getElementById('share-pw-field').style.display=(d&&d.has_password)?'block':'none';
+  if(d&&d.has_password){{
+    var inp=document.getElementById('share-pw-input');
+    inp.value=''; inp.placeholder='\u2022\u2022\u2022\u2022'; inp.dataset.hasSaved='1';
+    _updateSharePwBtn(true);
+  }}else{{
+    var inp=document.getElementById('share-pw-input');
+    inp.placeholder='Enter a password'; inp.dataset.hasSaved='';
+    _updateSharePwBtn(false);
+  }}
+  if(active){{
+    box.className='share-status on';
+    box.innerHTML='<div class="share-status-icon">'+IC.globe+'</div><div class="share-status-text">'
+      +'<div class="share-status-title">Public link active</div>'
+      +'<div class="share-status-sub">'+(d.has_password?'Password protected':'Anyone with the link can access')+'</div></div>';
+    document.getElementById('share-link-input').value=d.url||'';
+    linkRow.style.display='flex';
+    document.getElementById('share-clear-btn').style.display='inline-flex';
+  }}else{{
+    box.className='share-status off';
+    box.innerHTML='<div class="share-status-icon">'+IC.globe+'</div><div class="share-status-text">'
+      +'<div class="share-status-title">Not shared</div>'
+      +'<div class="share-status-sub">Turn on to generate a public link</div></div>';
+    linkRow.style.display='none';
+    document.getElementById('share-clear-btn').style.display='none';
+  }}
+}}
+
+async function _loadShareStatus(){{
+  try{{
+    var r=await fetch('/api/share/'+_shareType+'/'+encodeURIComponent(_shareId)+'?drive='+DI);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    _shareData=await r.json();
+    _renderShareStatus(_shareData,false);
+  }}catch(e){{
+    _renderShareStatus(null,false);
+  }}
+}}
+
+async function shareTogglePublic(checked){{
+  bar(true);
+  try{{
+    var pwField=document.getElementById('share-pw-toggle');
+    var body={{enabled:checked,drive:DI}};
+    if(checked&&pwField.checked){{
+      var pw=document.getElementById('share-pw-input').value;
+      if(pw) body.password=pw;
+    }}
+    var r=await fetch('/api/share/'+_shareType+'/'+encodeURIComponent(_shareId),{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    _shareData=await r.json();
+    _renderShareStatus(_shareData,false);
+    if(checked)_sharedIds.add(_shareId); else _sharedIds.delete(_shareId);
+    render();
+    toast(checked?'Public link created':'Link disabled','ok');
+  }}catch(e){{
+    toast('Failed to update share','err');
+    document.getElementById('share-enable-toggle').checked=!checked;
+  }}
+  bar(false);
+}}
+
+function _updateSharePwBtn(saved){{
+  var btn=document.getElementById('share-pw-save-btn');
+  if(!btn)return;
+  if(saved){{btn.textContent='Saved';btn.disabled=true;btn.classList.remove('btn-primary');btn.classList.add('btn-ghost');}}
+  else{{btn.textContent='Save';btn.disabled=false;btn.classList.add('btn-primary');btn.classList.remove('btn-ghost');}}
+}}
+
+function sharePwInputChanged(){{
+  var inp=document.getElementById('share-pw-input');
+  if(inp.dataset.hasSaved==='1'&&inp.value==='') _updateSharePwBtn(true);
+  else _updateSharePwBtn(false);
+}}
+
+function sharePwToggleChanged(checked){{
+  document.getElementById('share-pw-field').style.display=checked?'block':'none';
+  if(!checked) shareSavePassword('');
+}}
+
+async function shareSavePassword(){{
+  if(!document.getElementById('share-enable-toggle').checked) return;
+  var usePw=document.getElementById('share-pw-toggle').checked;
+  var pw=usePw?document.getElementById('share-pw-input').value:'';
+  if(usePw&&!pw){{
+    var inp=document.getElementById('share-pw-input');
+    if(inp.dataset.hasSaved==='1') return;
+    return;
+  }}
+  bar(true);
+  try{{
+    var r=await fetch('/api/share/'+_shareType+'/'+encodeURIComponent(_shareId),{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{enabled:true,password:pw,drive:DI}})}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    _shareData=await r.json();
+    _renderShareStatus(_shareData,false);
+    toast(usePw?'Password set':'Password removed','ok');
+  }}catch(e){{toast('Failed to update password','err');}}
+  bar(false);
+}}
+
+function shareCopyLink(){{
+  var input=document.getElementById('share-link-input');
+  if(!input.value)return;
+  navigator.clipboard.writeText(input.value).then(function(){{toast('Link copied','ok');}}).catch(function(){{input.select();document.execCommand('copy');toast('Link copied','ok');}});
+}}
+
+async function shareClearLink(){{
+  bar(true);
+  try{{
+    var r=await fetch('/api/share/'+_shareType+'/'+encodeURIComponent(_shareId)+'?drive='+DI,{{method:'DELETE'}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    _shareData={{active:false}};
+    _renderShareStatus(_shareData,false);
+    _sharedIds.delete(_shareId);
+    render();
+    toast('Link removed','ok');
+  }}catch(e){{toast('Failed to remove link','err');}}
+  bar(false);
+}}
+
+async function _loadSharedIds(){{
+  try{{
+    const r=await fetch(`/api/shares?drive=${{DI}}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    _sharedIds=new Set(d.file_ids||[]);
+    if(_allLoaded||files.length>0)render();
+  }}catch(e){{}}
+}}
+
+
 function selRename(){{
   if(sel.size===1){{_pushSearchBehind();openRename([...sel][0],document.querySelector(`[data-id="${{[...sel][0]}}"]`)?.dataset.name||'')}}
   else toast('Select only one item to rename','warn');
@@ -2691,7 +3160,7 @@ async function doSearch(){{
       <div class="sri-cb" onclick="event.stopPropagation();sriToggleCb('${{f.id}}',this.querySelector('.custom-cb'))">
         <div class="${{cbCls}}"></div>
       </div>
-      <div class="sri-icon">${{getIco(f.mimeType)}}</div>
+      <div class="sri-icon">${{(()=>{{const _m=f.mimeType||'';const _isText=_m.startsWith('text/')||_m.includes('json')||_m.includes('javascript')||_m.includes('xml')||_m.includes('python')||_m.includes('html')||_m.includes('css');if(f.thumbnailLink&&!_isText)return`<div class="sri-thumb-wrap"><img class="sri-thumb" src="${{f.thumbnailLink}}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;return getIco(f.mimeType);}})()}}</div>
       <div class="sri-info">
         <div class="sri-name">${{f.name}}</div>
         <div class="sri-meta">
@@ -2937,25 +3406,12 @@ async def handle_oauth_callback(request: web.Request) -> web.Response:
     if pd and (not state or pd.get("state") == state):
         flow = pd["flow"]
     if flow is None:
-        try:
-            from handlers.cmd_auth import _pending_flows as _bf
-            bp = _bf.get(uid)
-            if bp and (not state or bp.get("state") == state):
-                flow = bp["flow"]
-        except ImportError:
-            pass
-    if flow is None:
         flow = gdrive.build_web_flow()
 
     try:
         email, idx = await gdrive.exchange_code(uid, code, flow, None)
         _web_pending_flows.pop(uid, None)
         await db.delete_oauth_state(uid)
-        try:
-            from handlers.cmd_auth import _pending_flows as _bf
-            _bf.pop(uid, None)
-        except ImportError:
-            pass
 
         await _save_pic(gdrive, db, uid, idx)
 
@@ -3078,9 +3534,9 @@ async def api_download(request: web.Request) -> web.Response:
     Instead we fetch server-to-server using Authorization: Bearer, just like goindex.
     """
     import aiohttp as _aiohttp
-    uid = request["uid"]
     fid = request.match_info["fid"]
     di  = int(request.rel_url.query.get("drive", 0))
+    uid = request["uid"]
     try:
         meta         = await request.app["gdrive"].get_file_meta_for_download(uid, fid, di)
         mime         = meta.get("mimeType", "")
@@ -3266,6 +3722,1052 @@ async def api_search(request: web.Request) -> web.Response:
         raise web.HTTPInternalServerError(reason=str(e))
 
 
+
+# ─── Share API endpoints ──────────────────────────────────────────────────────
+# URL pattern: /api/share/{type}/{id}  where type in ('file','folder')
+
+def _share_url(request, token):
+    base = str(request.url.origin())
+    return f"{base}/s/{token}"
+
+@require_auth
+async def api_share_get(request: web.Request) -> web.Response:
+    """GET /api/share/{type}/{id} — return current share status for a file/folder."""
+    uid  = request["uid"]
+    fid  = request.match_info["id"]
+    db: Database = request.app["db"]
+    links = await db.get_share_links_for_file(fid)
+    if links:
+        doc = links[0]
+        return web.json_response({
+            "active": True,
+            "token": doc["token"],
+            "has_password": bool(doc.get("password_hash")),
+            "url": _share_url(request, doc["token"]),
+        })
+    return web.json_response({"active": False})
+
+
+@require_auth
+async def api_share_post(request: web.Request) -> web.Response:
+    """POST /api/share/{type}/{id} — create or update a share link."""
+    import secrets, hashlib
+    uid   = request["uid"]
+    ftype = request.match_info["type"]   # 'file' or 'folder'
+    fid   = request.match_info["id"]
+    body  = await request.json()
+    enabled = body.get("enabled", True)
+    pw    = body.get("password", None)  # None = leave unchanged; "" = clear; str = set
+    di    = int(body.get("drive", 0))
+
+    db:     Database             = request.app["db"]
+    gdrive: GoogleDriveManager   = request.app["gdrive"]
+
+    if not enabled:
+        # Disable — remove link and revoke GDrive permission
+        links = await db.get_share_links_for_file(fid)
+        for doc in links:
+            await db.delete_share_link(doc["token"])
+        try:
+            await gdrive.set_file_private(uid, fid, di)
+        except Exception as e:
+            logger.warning(f"Could not remove GDrive permission: {e}")
+        return web.json_response({"active": False})
+
+    # Check existing link
+    existing = await db.get_share_links_for_file(fid)
+    pw_hash = hashlib.sha256(pw.encode()).hexdigest() if pw else None
+
+    if existing:
+        doc = existing[0]
+        # Update password if provided
+        if pw is not None:
+            await db.db.share_links.update_one(
+                {"token": doc["token"]},
+                {"$set": {"password_hash": pw_hash}}
+            )
+            doc["password_hash"] = pw_hash
+        token = doc["token"]
+        return web.json_response({
+            "active": True,
+            "token": token,
+            "has_password": bool(doc.get("password_hash")),
+            "url": _share_url(request, token),
+        })
+
+    # Create new
+    try:
+        meta = await gdrive.get_file(uid, fid, di)
+    except Exception:
+        meta = {"name": fid, "mimeType": ""}
+
+    try:
+        await gdrive.set_file_shared(uid, fid, di)
+    except Exception as e:
+        logger.warning(f"Could not set GDrive permission: {e}")
+
+    token = secrets.token_urlsafe(20)
+    is_folder = "folder" in meta.get("mimeType", "") or ftype == "folder"
+    await db.create_share_link(
+        token=token,
+        file_id=fid,
+        file_name=meta.get("name", fid),
+        mime_type=meta.get("mimeType", ""),
+        is_folder=is_folder,
+        user_id=uid,
+        drive_index=di,
+        password_hash=pw_hash,
+    )
+    return web.json_response({
+        "active": True,
+        "token": token,
+        "has_password": bool(pw_hash),
+        "url": _share_url(request, token),
+    })
+
+
+@require_auth
+async def api_share_delete(request: web.Request) -> web.Response:
+    """DELETE /api/share/{type}/{id} — revoke share link."""
+    uid  = request["uid"]
+    fid  = request.match_info["id"]
+    di   = int(request.rel_url.query.get("drive", 0))
+    db:     Database           = request.app["db"]
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+    links = await db.get_share_links_for_file(fid)
+    for doc in links:
+        await db.delete_share_link(doc["token"])
+    try:
+        await gdrive.set_file_private(uid, fid, di)
+    except Exception as e:
+        logger.warning(f"Could not remove GDrive permission: {e}")
+    return web.json_response({"active": False})
+
+
+@require_auth
+async def api_list_shares(request: web.Request) -> web.Response:
+    """GET /api/shares?drive=N — list all shared file_ids for current user."""
+    uid = request["uid"]
+    db: Database = request.app["db"]
+    links = await db.get_all_share_links(uid)
+    file_ids = list({doc["file_id"] for doc in links})
+    return web.json_response({"file_ids": file_ids})
+
+
+# ─── Public share page ────────────────────────────────────────────────────────
+
+def _share_page(body, title="Shared"):
+    return web.Response(content_type="text/html", text=(
+        "<!DOCTYPE html><html lang='en'><head>"
+        "<meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
+        f"<title>{title} — TDrive</title>"
+        f"<style>{_CSS}</style>"
+        f"</head><body>{body}</body></html>"
+    ))
+
+def _share_password_form(token, error=None):
+    err = f'<div style="color:var(--red);font-size:13px;margin-bottom:12px">{error}</div>' if error else ""
+    return (
+        '<div class="share-spub-page"><div class="spub-card">'
+        f'<div class="spub-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>'
+        '<div class="spub-name">Password required</div>'
+        '<div class="spub-meta">This link is protected. Enter the password to continue.</div>'
+        f'{err}'
+        f'<form method="POST" action="/s/{token}">'
+        '<div class="fg" style="text-align:left"><input name="password" type="password" placeholder="Password" autofocus></div>'
+        '<button type="submit" class="btn btn-primary btn-wide" style="height:46px;width:100%">Unlock</button>'
+        "</form></div></div>"
+    )
+
+def _fmt_size(b):
+    if not b: return ""
+    b = int(b)
+    if b < 1048576: return f"{b // 1024} KB"
+    if b < 1073741824: return f"{b // 1048576} MB"
+    return f"{b // 1073741824} GB"
+
+def _share_verify_pw_cookie(token, cookie_val):
+    import hmac, hashlib
+    if not cookie_val: return False
+    try:
+        expected = hmac.new(token.encode(), b"share-pw-ok", hashlib.sha256).hexdigest()
+        return hmac.compare_digest(cookie_val, expected)
+    except Exception:
+        return False
+
+def _share_sign_pw(token):
+    import hmac, hashlib
+    return hmac.new(token.encode(), b"share-pw-ok", hashlib.sha256).hexdigest()
+
+def _share_password_ok(request, doc):
+    if not doc.get("password_hash"):
+        return True
+    cookie = request.cookies.get("spw_" + doc["token"])
+    return _share_verify_pw_cookie(doc["token"], cookie)
+
+async def _share_validate_child(gdrive: GoogleDriveManager, uid: int, di: int, folder_id: str, fid: str) -> dict | None:
+    """For a folder share, verify `fid` lives anywhere inside the shared folder
+    tree (not just as a direct child). Walks the parent chain upward until we
+    reach the shared root or a dead end. Returns the file metadata on success,
+    None if the file is not reachable from the shared folder."""
+    try:
+        meta = await gdrive.get_file(uid, fid, di)
+    except Exception:
+        return None
+
+    # Walk up the parent chain (max 20 levels to avoid infinite loops)
+    current_id = fid
+    for _ in range(20):
+        try:
+            node = await gdrive.get_file(uid, current_id, di)
+        except Exception:
+            return None
+        parents = node.get("parents") or []
+        if folder_id in parents:
+            return meta          # shared root is an ancestor — file is valid
+        if not parents:
+            return None          # reached drive root without finding shared folder
+        current_id = parents[0]  # Google Drive files have exactly one parent
+    return None
+
+def _build_share_overlay_html() -> str:
+    """The preview overlay markup, reused as-is from the authenticated file manager
+    (same #preview-overlay/#preview-bar/#preview-body structure + CSS classes)."""
+    return (
+        '<div id="preview-overlay" class="open">'
+        '<div id="preview-bar">'
+        '<a id="preview-back-btn" href="javascript:history.back()" title="Back">'
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></a>'
+        '<span id="preview-title"></span>'
+        '<button id="preview-copy-btn" onclick="previewCopyText()" title="Copy text">'
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>'
+        '</button>'
+        '<a id="preview-dl-btn" href="#" title="Download">'
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>'
+        '</a>'
+        '</div>'
+        '<div id="preview-body">'
+        '<div id="preview-spinner">'
+        '<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>'
+        '</div></div></div>'
+    )
+
+def _build_share_player_page(token: str, title: str, files: list, auto_fid: str, back_url: str = None) -> web.Response:
+    """Standalone share page that opens the requested file straight into our
+    video/audio/image/text player, reusing the exact CSS used by the authenticated
+    file manager. `files` is the sibling list for prev/next nav (e.g. all images
+    in the shared folder); each item needs id/name/mimeType."""
+    import json as _json
+
+    def _js_str(s):
+        return s.replace("\\", "\\\\").replace("`", "\\`")
+
+    ic_folder = _js_str(_icon("folder", 32, "", "#0386c3"))
+    ic_file   = _js_str(_icon("file",   32, "", "#607d8b"))
+    ic_image  = _js_str(_icon("image",  32, "", "#a78bfa"))
+    ic_video  = _js_str(_icon("video",  32, "", "#f87171"))
+    ic_audio  = _js_str(_icon("audio",  32, "", "#e55835"))
+
+    files_js = _json.dumps([{"id": f["id"], "name": f.get("name", ""), "mimeType": f.get("mimeType", "")} for f in files])
+    back_btn_display = "flex" if back_url else "none"
+
+    js = f"""
+var IC={{folder:`{ic_folder}`,file:`{ic_file}`,image:`{ic_image}`,video:`{ic_video}`,audio:`{ic_audio}`}};
+var _pvId=null, _pvToken='{token}', _pvBackUrl={_json.dumps(back_url)};
+var _imgList=[], _imgIdx=0, _vidList=[], _vidIdx=0, _audList=[], _audIdx=0;
+var _vidEl=null, _vidHideTimer=null, _vidDragging=false, _audEl=null, _audDragging=false;
+var _allFiles={files_js};
+
+document.getElementById('preview-back-btn').style.display='{back_btn_display}';
+if(_pvBackUrl) document.getElementById('preview-back-btn').href=_pvBackUrl;
+
+function _previewUrl(fid){{return '/s/'+_pvToken+'/preview?fid='+encodeURIComponent(fid);}}
+function _dlUrl(fid){{return '/s/'+_pvToken+'/download?fid='+encodeURIComponent(fid);}}
+function _updateDlBtn(fid){{var b=document.getElementById('preview-dl-btn');if(b)b.href=_dlUrl(fid);}}
+function _fmtTime(s){{if(isNaN(s)||!isFinite(s))return'0:00';var m=Math.floor(s/60),sc=Math.floor(s%60);return m+':'+(sc<10?'0':'')+sc;}}
+function _getSiblings(mime){{var m=mime||'';if(m.includes('image'))return _allFiles.filter(f=>f.mimeType&&f.mimeType.includes('image'));if(m.includes('video'))return _allFiles.filter(f=>f.mimeType&&f.mimeType.includes('video'));if(m.includes('audio'))return _allFiles.filter(f=>f.mimeType&&f.mimeType.includes('audio'));return[];}}
+
+function openSharePreview(id,mime,name){{
+  _pvId=id;
+  document.getElementById('preview-title').textContent=name||'Preview';
+  _updateDlBtn(id);
+  var body=document.getElementById('preview-body');
+  var sp=document.getElementById('preview-spinner');
+  _clearPreviewBody(body,sp);
+  sp.style.display='flex';
+  var m=mime||'';
+  document.getElementById('preview-copy-btn').classList.remove('visible');
+  if(m.includes('image')){{
+    var sib=_getSiblings(m);
+    _imgList=sib.length?sib:[{{id,name,mimeType:mime}}];
+    _imgIdx=_imgList.findIndex(f=>f.id===id);if(_imgIdx<0)_imgIdx=0;
+    _buildImageViewer(body,()=>sp.style.display='none');
+  }} else if(m.includes('video')){{
+    var sib=_getSiblings(m);
+    _vidList=sib.length?sib:[{{id,name,mimeType:mime}}];
+    _vidIdx=_vidList.findIndex(f=>f.id===id);if(_vidIdx<0)_vidIdx=0;
+    _buildVideoPlayer(body,()=>sp.style.display='none');
+  }} else if(m.includes('audio')){{
+    var sib=_getSiblings(m);
+    _audList=sib.length?sib:[{{id,name,mimeType:mime}}];
+    _audIdx=_audList.findIndex(f=>f.id===id);if(_audIdx<0)_audIdx=0;
+    _buildAudioPlayer(body,()=>sp.style.display='none');
+  }} else {{
+    fetch(_previewUrl(id)).then(r=>{{if(!r.ok)throw new Error(r.status);return r.text();}}).then(txt=>{{
+      sp.style.display='none';
+      document.getElementById('preview-copy-btn').classList.add('visible');
+      var pre=document.createElement('pre');pre.textContent=txt;body.appendChild(pre);
+    }}).catch(()=>{{sp.style.display='none';showUnsupported(name,IC.file);}});
+  }}
+}}
+
+function previewCopyText(){{
+  var pre=document.querySelector('#preview-body pre');if(!pre)return;
+  navigator.clipboard.writeText(pre.textContent).then(()=>{{
+    var btn=document.getElementById('preview-copy-btn');
+    btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    btn.style.background='var(--green)';btn.style.color='#fff';
+    setTimeout(()=>{{btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';btn.style.background='';btn.style.color='';}},1800);
+  }}).catch(()=>{{}});
+}}
+
+var _imgScale=1,_imgTx=0,_imgTy=0,_imgPinchDist0=0,_imgPinching=false;
+var _imgSwipeStartX=0,_imgSwipeStartY=0,_imgSwipeActive=false;
+var _panActive=false,_panStartX=0,_panStartY=0,_panBaseTx=0,_panBaseTy=0;
+function _imgApplyTransform(img){{img.style.transform='translate('+_imgTx+'px,'+_imgTy+'px) scale('+_imgScale+')';}}
+function _imgResetTransform(img){{_imgScale=1;_imgTx=0;_imgTy=0;if(img)_imgApplyTransform(img);}}
+function _buildImageViewer(body,onReady){{
+  var wrap=document.createElement('div');wrap.id='img-viewer';
+  var img=document.createElement('img');
+  img.style.cssText='opacity:0;transition:opacity .22s;transform-origin:center center;will-change:transform;touch-action:none;user-select:none;-webkit-user-select:none;';
+  var btnPrev=document.createElement('button');btnPrev.className='img-nav-btn prev';
+  btnPrev.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+  btnPrev.onclick=()=>_imgNavigate(-1);
+  var btnNext=document.createElement('button');btnNext.className='img-nav-btn next';
+  btnNext.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  btnNext.onclick=()=>_imgNavigate(1);
+  var counter=document.createElement('div');counter.className='img-counter';
+  wrap.appendChild(btnPrev);wrap.appendChild(img);wrap.appendChild(btnNext);wrap.appendChild(counter);
+  body.appendChild(wrap);
+  // Double-tap to zoom toggle
+  var _dtTimer=null,_dtCount=0;
+  wrap.addEventListener('click',function(e){{
+    if(e.target===btnPrev||e.target===btnNext||btnPrev.contains(e.target)||btnNext.contains(e.target))return;
+    _dtCount++;
+    if(_dtTimer)clearTimeout(_dtTimer);
+    _dtTimer=setTimeout(function(){{
+      if(_dtCount>=2){{_imgScale>1?_imgResetTransform(img):(_imgScale=2.5,_imgApplyTransform(img));}}
+      _dtCount=0;_dtTimer=null;
+    }},260);
+  }});
+  // Touch: pinch-zoom, swipe-to-navigate, pan-when-zoomed
+  wrap.addEventListener('touchstart',function(e){{
+    if(e.touches.length===2){{
+      _imgPinching=true;_imgSwipeActive=false;_panActive=false;
+      _imgPinchDist0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      e.preventDefault();
+    }} else if(e.touches.length===1){{
+      if(_imgScale>1){{
+        _panActive=true;_imgSwipeActive=false;
+        _panStartX=e.touches[0].clientX;_panStartY=e.touches[0].clientY;
+        _panBaseTx=_imgTx;_panBaseTy=_imgTy;
+      }} else {{
+        _imgSwipeActive=true;_panActive=false;
+        _imgSwipeStartX=e.touches[0].clientX;_imgSwipeStartY=e.touches[0].clientY;
+      }}
+    }}
+  }},{{passive:false}});
+  wrap.addEventListener('touchmove',function(e){{
+    if(_imgPinching&&e.touches.length===2){{
+      var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      _imgScale=Math.max(1,Math.min(5,_imgScale*(d/_imgPinchDist0)));
+      _imgPinchDist0=d;
+      _imgApplyTransform(img);
+      e.preventDefault();
+    }} else if(_panActive&&_imgScale>1&&e.touches.length===1){{
+      _imgTx=_panBaseTx+(e.touches[0].clientX-_panStartX);
+      _imgTy=_panBaseTy+(e.touches[0].clientY-_panStartY);
+      _imgApplyTransform(img);
+      e.preventDefault();
+    }} else if(_imgSwipeActive&&e.touches.length===1){{
+      e.preventDefault();
+    }}
+  }},{{passive:false}});
+  wrap.addEventListener('touchend',function(e){{
+    if(_imgPinching){{
+      _imgPinching=false;
+      if(_imgScale<=1.05)_imgResetTransform(img);
+      return;
+    }}
+    if(_panActive){{_panActive=false;return;}}
+    if(_imgSwipeActive&&e.changedTouches.length===1&&_imgScale<=1){{
+      var dx=e.changedTouches[0].clientX-_imgSwipeStartX;
+      var dy=e.changedTouches[0].clientY-_imgSwipeStartY;
+      if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>44)_imgNavigate(dx<0?1:-1);
+      _imgSwipeActive=false;
+    }}
+  }},{{passive:true}});
+  _imgLoadCurrent(img,counter,btnPrev,btnNext,onReady);
+}}
+function _imgLoadCurrent(img,counter,btnPrev,btnNext,onReady){{
+  var f=_imgList[_imgIdx];if(!f)return;
+  _pvId=f.id;_updateDlBtn(f.id);
+  document.getElementById('preview-title').textContent=f.name||'Image';
+  _imgResetTransform(img);
+  img.style.opacity='0';
+  img.onload=()=>{{if(onReady){{onReady();onReady=null;}}img.style.opacity='1';}};
+  img.onerror=()=>{{if(onReady){{onReady();onReady=null;}}showUnsupported(f.name,IC.image);}};
+  img.src=_previewUrl(f.id);
+  counter.textContent=(_imgIdx+1)+' / '+_imgList.length;
+  btnPrev.disabled=_imgIdx===0;btnNext.disabled=_imgIdx===_imgList.length-1;
+  if(_imgList.length<=1){{btnPrev.style.display='none';btnNext.style.display='none';counter.style.display='none';}}
+}}
+function _imgNavigate(dir){{
+  var ni=_imgIdx+dir;if(ni<0||ni>=_imgList.length)return;
+  _imgIdx=ni;
+  var wrap=document.getElementById('img-viewer');if(!wrap)return;
+  _imgLoadCurrent(wrap.querySelector('img'),wrap.querySelector('.img-counter'),wrap.querySelector('.img-nav-btn.prev'),wrap.querySelector('.img-nav-btn.next'),null);
+}}
+document.addEventListener('keydown',e=>{{
+  if(e.key==='ArrowLeft')_imgNavigate(-1);
+  if(e.key==='ArrowRight')_imgNavigate(1);
+}});
+
+function _buildVideoPlayer(body,onReady){{
+  var f=_vidList[_vidIdx];if(!f)return;
+  var wrap=document.createElement('div');wrap.id='video-player-wrap';
+  var vid=document.createElement('video');vid.playsInline=true;vid.preload='auto';_vidEl=vid;
+  wrap.innerHTML='<div id="vid-nav-overlay"><div id="vid-play-flash"></div></div>'
+    +'<div id="vid-overlay-center">'
+    +'<button class="vid-overlay-btn sm" id="vid-ol-prev" onclick="vidNavigate(-1)" title="Previous"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>'
+    +'<button class="vid-overlay-btn lg" id="vid-ol-play" onclick="vidTogglePlay()" title="Play/Pause"><svg id="vid-overlay-play-ico" width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>'
+    +'<button class="vid-overlay-btn sm" id="vid-ol-next" onclick="vidNavigate(1)" title="Next"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12z"/><rect x="16" y="6" width="2" height="12"/></svg></button>'
+    +'</div>'
+    +'<div id="vid-controls">'
+    +'<div id="vid-progress-wrap"><div id="vid-progress-track"><div id="vid-progress-buf"></div><div id="vid-progress-fill"></div><div id="vid-thumb"></div></div></div>'
+    +'<div id="vid-controls-row">'
+    +'<button class="vid-btn" id="vid-play-btn" title="Play/Pause" onclick="vidTogglePlay()"><svg id="vid-play-ico" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>'
+    +'<span id="vid-time">0:00 / 0:00</span>'
+    +'<span id="vid-title-bar"></span>'
+    +'<div id="vid-vol-wrap"><button class="vid-btn" id="vid-mute-btn" onclick="vidToggleMute()"><svg id="vid-vol-ico" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button></div>'
+    +'<button class="vid-btn" id="vid-full-btn" onclick="vidToggleFullscreen()" title="Fullscreen"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>'
+    +'</div></div>';
+  wrap.insertBefore(vid,wrap.firstChild);
+  body.appendChild(wrap);
+  vid.src=_previewUrl(f.id);
+  _updateDlBtn(f.id);
+  document.getElementById('vid-title-bar').textContent=f.name||'';
+  _vidUpdateNavBtns();
+  vid.oncanplay=()=>{{if(onReady){{onReady();onReady=null;}}vid.play().then(()=>_vidUpdatePlayBtn()).catch(()=>{{}});}};
+  vid.onerror=()=>{{if(onReady){{onReady();onReady=null;}}showUnsupported(f.name,IC.video);}};
+  vid.addEventListener('timeupdate',_vidSyncProgress);
+  vid.addEventListener('progress',_vidSyncBuffer);
+  vid.addEventListener('ended',()=>{{if(_vidIdx<_vidList.length-1)vidNavigate(1);}});
+  var _tapTimer=null,_tapCount=0,_tapX=0;
+  vid.addEventListener('click',e=>{{
+    _tapCount++;_tapX=e.clientX;
+    if(_tapTimer)clearTimeout(_tapTimer);
+    _tapTimer=setTimeout(()=>{{
+      if(_tapCount>=2){{var rect=vid.getBoundingClientRect();var pct=(_tapX-rect.left)/rect.width;var secs=10;
+        if(pct<0.5)vid.currentTime=Math.max(0,vid.currentTime-secs);
+        else vid.currentTime=Math.min(vid.duration||0,vid.currentTime+secs);
+      }}
+      _tapCount=0;_tapTimer=null;
+    }},280);
+  }});
+  wrap.addEventListener('mousemove',_vidShowControls);
+  wrap.addEventListener('touchstart',_vidShowControls,{{passive:true}});
+  var pw=document.getElementById('vid-progress-wrap');
+  pw.addEventListener('mousedown',e=>{{_vidDragging=true;_vidSeekTo(e,pw);}});
+  document.addEventListener('mousemove',e=>{{if(_vidDragging)_vidSeekTo(e,pw);}});
+  document.addEventListener('mouseup',()=>{{_vidDragging=false;}});
+  pw.addEventListener('touchstart',e=>{{_vidDragging=true;_vidSeekTouch(e,pw);}},{{passive:true}});
+  document.addEventListener('touchmove',e=>{{if(_vidDragging)_vidSeekTouch(e,pw);}},{{passive:true}});
+  document.addEventListener('touchend',()=>{{_vidDragging=false;}});
+}}
+function _vidShowControls(){{
+  var w=document.getElementById('video-player-wrap');if(w)w.classList.remove('controls-hidden');
+  clearTimeout(_vidHideTimer);
+  if(_vidEl&&!_vidEl.paused)_vidHideTimer=setTimeout(()=>{{var w2=document.getElementById('video-player-wrap');if(w2)w2.classList.add('controls-hidden');}},3000);
+}}
+function _vidSyncProgress(){{var vid=_vidEl;if(!vid)return;var pct=vid.duration?vid.currentTime/vid.duration*100:0;var fill=document.getElementById('vid-progress-fill');var thumb=document.getElementById('vid-thumb');if(fill)fill.style.width=pct+'%';if(thumb)thumb.style.left=pct+'%';var t=document.getElementById('vid-time');if(t)t.textContent=_fmtTime(vid.currentTime)+' / '+_fmtTime(vid.duration);}}
+function _vidSyncBuffer(){{var vid=_vidEl;if(!vid||!vid.duration)return;var buf=0;for(var i=0;i<vid.buffered.length;i++){{if(vid.buffered.start(i)<=vid.currentTime&&vid.currentTime<=vid.buffered.end(i)){{buf=vid.buffered.end(i)/vid.duration*100;break;}}}}var b=document.getElementById('vid-progress-buf');if(b)b.style.width=buf+'%';}}
+function _vidSeekTo(e,pw){{var vid=_vidEl;if(!vid||!vid.duration)return;var r=pw.getBoundingClientRect();var pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));vid.currentTime=pct*vid.duration;_vidSyncProgress();}}
+function _vidSeekTouch(e,pw){{if(!e.touches.length)return;_vidSeekTo(e.touches[0],pw);}}
+function vidTogglePlay(){{var vid=_vidEl;if(!vid)return;if(vid.paused)vid.play();else vid.pause();_vidUpdatePlayBtn();_vidShowControls();}}
+function _vidUpdatePlayBtn(){{var paused=_vidEl?_vidEl.paused:true;var path=paused?'<path d="M8 5v14l11-7z"/>':'<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';var ico=document.getElementById('vid-play-ico');if(ico)ico.innerHTML=path;var oico=document.getElementById('vid-overlay-play-ico');if(oico)oico.innerHTML=path;}}
+function vidToggleMute(){{var vid=_vidEl;if(!vid)return;vid.muted=!vid.muted;var ico=document.getElementById('vid-vol-ico');if(!ico)return;ico.innerHTML=vid.muted?'<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>':'<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';}}
+function vidToggleFullscreen(){{var w=document.getElementById('video-player-wrap');if(!w)return;if(!document.fullscreenElement){{var p=w.requestFullscreen||w.webkitRequestFullscreen||w.mozRequestFullScreen||w.msRequestFullscreen;if(p)p.call(w).catch(()=>{{}});}}else{{var exit=document.exitFullscreen||document.webkitExitFullscreen;if(exit)exit.call(document).catch(()=>{{}});}}}}
+function _vidUpdateNavBtns(){{var pb=document.getElementById('vid-ol-prev');var nb=document.getElementById('vid-ol-next');if(pb){{pb.classList.remove('hidden');pb.classList.toggle('dimmed',_vidIdx===0);}}if(nb){{nb.classList.remove('hidden');nb.classList.toggle('dimmed',_vidIdx===_vidList.length-1);}}}}
+function vidNavigate(dir){{
+  var ni=_vidIdx+dir;if(ni<0||ni>=_vidList.length)return;
+  _vidIdx=ni;var f=_vidList[_vidIdx];_pvId=f.id;_updateDlBtn(f.id);
+  document.getElementById('preview-title').textContent=f.name||'Video';
+  var tb=document.getElementById('vid-title-bar');if(tb)tb.textContent=f.name||'';
+  if(_vidEl){{_vidEl.src=_previewUrl(f.id);_vidEl.load();_vidEl.oncanplay=()=>{{_vidEl.play().then(()=>_vidUpdatePlayBtn()).catch(()=>{{}});}};}}
+  _vidUpdateNavBtns();
+}}
+
+function _buildAudioPlayer(body,onReady){{
+  var f=_audList[_audIdx];if(!f)return;
+  var wrap=document.createElement('div');wrap.id='audio-player-wrap';
+  var playlistItems=_audList.map((af,i)=>'<div class="apl-item'+(i===_audIdx?' active':'')+'" onclick="audPlayIdx('+i+')" id="apl-'+af.id+'">'
+    +'<span class="apl-idx">'+(i+1)+'</span>'
+    +'<div class="apl-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg></div>'
+    +'<span class="apl-name">'+af.name+'</span></div>').join('');
+  wrap.innerHTML='<audio id="audio-el" preload="auto"></audio>'
+    +'<div id="audio-now-playing"><div id="audio-art"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-linecap="round"><path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg></div>'
+    +'<div id="audio-now-title">'+(f.name||'Audio')+'</div><div id="audio-now-sub">'+(_audIdx+1)+' of '+_audList.length+'</div></div>'
+    +'<div id="audio-scrubber-wrap"><div id="audio-progress-wrap"><div id="audio-progress-track"><div id="audio-progress-fill"></div><div id="audio-thumb"></div></div></div>'
+    +'<div id="audio-times"><span id="aud-cur">0:00</span><span id="aud-dur">0:00</span></div></div>'
+    +'<div id="audio-controls">'
+    +'<button class="aud-btn" onclick="audNavigate(-1)" id="aud-prev-btn" title="Previous"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>'
+    +'<button id="aud-play-btn" onclick="audTogglePlay()" title="Play/Pause"><svg id="aud-play-ico" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>'
+    +'<button class="aud-btn" onclick="audNavigate(1)" id="aud-next-btn" title="Next"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12z"/><rect x="16" y="6" width="2" height="12"/></svg></button>'
+    +'</div>'
+    +'<div id="audio-playlist-wrap"><div id="audio-playlist-header"><span>Playlist</span><span style="font-weight:400">'+_audList.length+' tracks</span></div>'
+    +'<div id="audio-playlist">'+playlistItems+'</div></div>';
+  body.appendChild(wrap);
+  _audEl=wrap.querySelector('#audio-el');
+  _audLoadTrack(onReady);
+  _audEl.addEventListener('timeupdate',_audSyncProgress);
+  _audEl.addEventListener('ended',()=>{{if(_audIdx<_audList.length-1)audNavigate(1);}});
+  var pw=document.getElementById('audio-progress-wrap');
+  pw.addEventListener('mousedown',e=>{{_audDragging=true;_audSeekTo(e,pw);}});
+  document.addEventListener('mousemove',e=>{{if(_audDragging)_audSeekTo(e,pw);}});
+  document.addEventListener('mouseup',()=>{{_audDragging=false;}});
+  pw.addEventListener('touchstart',e=>{{_audDragging=true;_audSeekTouch(e,pw);}},{{passive:true}});
+  document.addEventListener('touchmove',e=>{{if(_audDragging)_audSeekTouch(e,pw);}},{{passive:true}});
+  document.addEventListener('touchend',()=>{{_audDragging=false;}});
+}}
+function _audLoadTrack(onReady){{
+  var f=_audList[_audIdx];if(!f||!_audEl)return;
+  _pvId=f.id;_updateDlBtn(f.id);
+  document.getElementById('preview-title').textContent=f.name||'Audio';
+  var title=document.getElementById('audio-now-title');if(title)title.textContent=f.name||'Audio';
+  var sub=document.getElementById('audio-now-sub');if(sub)sub.textContent=(_audIdx+1)+' of '+_audList.length;
+  _audEl.src=_previewUrl(f.id);
+  _audEl.oncanplay=()=>{{if(onReady){{onReady();onReady=null;}}_audEl.play().then(()=>{{_audUpdatePlayBtn();_audUpdateArt(true);}}).catch(()=>{{}});}};
+  _audEl.onerror=()=>{{if(onReady){{onReady();onReady=null;}}}};
+  document.querySelectorAll('.apl-item').forEach((el,i)=>el.classList.toggle('active',i===_audIdx));
+  var activeEl=document.getElementById('apl-'+f.id);if(activeEl)activeEl.scrollIntoView({{block:'nearest',behavior:'smooth'}});
+  _audUpdateBtns();_audUpdateArt(false);
+}}
+function _audSyncProgress(){{var a=_audEl;if(!a)return;var pct=a.duration?a.currentTime/a.duration*100:0;var fill=document.getElementById('audio-progress-fill');var thumb=document.getElementById('audio-thumb');if(fill)fill.style.width=pct+'%';if(thumb)thumb.style.left=pct+'%';var cur=document.getElementById('aud-cur');if(cur)cur.textContent=_fmtTime(a.currentTime);var dur=document.getElementById('aud-dur');if(dur)dur.textContent=_fmtTime(a.duration);}}
+function _audSeekTo(e,pw){{var a=_audEl;if(!a||!a.duration)return;var r=pw.getBoundingClientRect();var pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));a.currentTime=pct*a.duration;_audSyncProgress();}}
+function _audSeekTouch(e,pw){{if(!e.touches.length)return;_audSeekTo(e.touches[0],pw);}}
+function audTogglePlay(){{var a=_audEl;if(!a)return;if(a.paused){{a.play();_audUpdateArt(true);}}else{{a.pause();_audUpdateArt(false);}}_audUpdatePlayBtn();}}
+function _audUpdatePlayBtn(){{var ico=document.getElementById('aud-play-ico');if(!ico||!_audEl)return;ico.innerHTML=_audEl.paused?'<path d="M8 5v14l11-7z"/>':'<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';}}
+function _audUpdateArt(playing){{var art=document.getElementById('audio-art');if(art)art.classList.toggle('playing',playing);}}
+function _audUpdateBtns(){{var pb=document.getElementById('aud-prev-btn');var nb=document.getElementById('aud-next-btn');if(pb)pb.disabled=_audIdx===0;if(nb)nb.disabled=_audIdx===_audList.length-1;}}
+function audPlayIdx(idx){{if(idx<0||idx>=_audList.length)return;var wasPlaying=_audEl&&!_audEl.paused;_audIdx=idx;_audLoadTrack(null);if(wasPlaying)setTimeout(()=>{{if(_audEl)_audEl.play();_audUpdateArt(true);_audUpdatePlayBtn();}},120);}}
+function audNavigate(dir){{audPlayIdx(_audIdx+dir);}}
+
+function showUnsupported(name,icon){{
+  var body=document.getElementById('preview-body');
+  var d=document.createElement('div');d.id='preview-unsupported';
+  d.innerHTML=`<div class="pu-icon-wrap">${{icon||IC.file}}</div><h3>Can&#39;t preview this file</h3><p>No preview is available for this file type.<br>You can download it to open it locally.</p>
+    <button class="pu-dl-btn" onclick="window.open(_dlUrl(_pvId),'_blank')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg> Download file</button>`;
+  body.appendChild(d);
+}}
+function _clearPreviewBody(body,sp){{
+  if(_vidEl){{try{{_vidEl.pause();_vidEl.src='';}}catch(e){{}}}}_vidEl=null;
+  if(_audEl){{try{{_audEl.pause();_audEl.src='';}}catch(e){{}}}}_audEl=null;
+  clearTimeout(_vidHideTimer);
+  var cb=document.getElementById('preview-copy-btn');if(cb)cb.classList.remove('visible');
+  Array.from(body.children).forEach(c=>{{if(c!==sp)c.remove();}});
+  sp.style.display='flex';
+}}
+
+document.addEventListener('DOMContentLoaded',function(){{
+  var f=_allFiles.find(x=>x.id==='{auto_fid}');
+  if(f)openSharePreview(f.id,f.mimeType,f.name);
+}});
+"""
+
+    html = (
+        "<!DOCTYPE html><html lang='en'><head>"
+        "<meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
+        f"<title>{title} — TDrive</title>"
+        "<link rel='preconnect' href='https://fonts.googleapis.com'>"
+        "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
+        "<link href='https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap' rel='stylesheet'>"
+        f"<style>{_CSS}</style>"
+        f"</head><body>{_build_share_overlay_html()}<script>{js}</script></body></html>"
+    )
+    return web.Response(content_type="text/html", text=html)
+
+
+async def handle_share_view(request: web.Request) -> web.Response:
+    """GET /s/{token} — public share landing page."""
+    token = request.match_info["token"]
+    db: Database = request.app["db"]
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+
+    doc = await db.get_share_link(token)
+    if not doc:
+        return web.Response(text="Share link not found or has been revoked.", status=404,
+                            content_type="text/html")
+
+    if not _share_password_ok(request, doc):
+        return _share_page(_share_password_form(token), "Protected link")
+
+    file_id  = doc["file_id"]
+    file_name = doc["file_name"]
+    is_folder = doc["is_folder"]
+    uid      = doc["user_id"]
+    di       = doc.get("drive_index", 0)
+    mime     = doc.get("mime_type", "")
+
+    if is_folder:
+        # Support navigating into subfolders via ?sub=<google_drive_folder_id>
+        sub_param = request.rel_url.query.get("sub", "")
+        current_folder_id = file_id
+        current_name = file_name
+        if sub_param:
+            # Verify the requested subfolder is actually a child of the shared root
+            # by listing the root and walking down one level
+            try:
+                root_items = await gdrive.list_folder_contents(uid, file_id, di)
+                valid_sub_ids = {item["id"] for item in root_items if "folder" in item.get("mimeType", "")}
+                if sub_param not in valid_sub_ids:
+                    # Try one more level deep (grandchildren)
+                    valid_sub_ids_deep = set()
+                    for sid in valid_sub_ids:
+                        try:
+                            children = await gdrive.list_folder_contents(uid, sid, di)
+                            for c in children:
+                                if "folder" in c.get("mimeType", ""):
+                                    valid_sub_ids_deep.add(c["id"])
+                        except Exception:
+                            pass
+                    if sub_param not in valid_sub_ids_deep:
+                        return web.Response(text="Subfolder not found.", status=404, content_type="text/html")
+                # Get the subfolder name from the items we already fetched
+                for item in root_items:
+                    if item["id"] == sub_param:
+                        current_name = item.get("name", "Folder")
+                        break
+                else:
+                    current_name = "Folder"
+                current_folder_id = sub_param
+            except Exception:
+                pass
+
+        # Render folder listing — AJAX-powered single-page navigation
+        import json as _json
+
+        ic_folder_b64 = _icon("folder", 28, "", "#0386c3").replace("`", "\\`").replace("\\", "\\\\")
+        ic_back_b64   = _icon("back",   14, "").replace("`", "\\`").replace("\\", "\\\\")
+        ic_dl_b64     = _icon("download", 18, "").replace("`", "\\`").replace("\\", "\\\\")
+        ic_file_b64   = _icon("file",  28, "", "#607d8b").replace("`", "\\`").replace("\\", "\\\\")
+
+        body = (
+            # Progress bar
+            '<div id="bar"></div>'
+            '<div class="spub-browse" id="spub-root">'
+            # Header (static, always visible)
+            '<div id="spub-header" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+            f'<div class="fi-icon" id="spub-folder-ico">{_icon("folder", 28, "", "#0386c3")}</div>'
+            '<div>'
+            f'<div style="font-size:18px;font-weight:700" id="spub-title">{file_name}</div>'
+            '<div style="font-size:12px;color:var(--text3)">Shared folder · view only</div>'
+            '</div></div>'
+            # Breadcrumb back link
+            '<div id="spub-back" style="display:none;margin-bottom:12px">'
+            f'<a id="spub-back-a" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);text-decoration:none;cursor:pointer">'
+            f'{_icon("back", 14)} <span id="spub-back-label">Back</span></a>'
+            '</div>'
+            # File list container (animated)
+            '<div id="spub-list-wrap" style="border:1px solid var(--border);border-radius:var(--r12);overflow:hidden;transition:opacity .18s ease">'
+            '<div id="spub-list"></div>'
+            '</div>'
+            '</div>'
+            '<script>'
+            f'var _tok={_json.dumps(token)};'
+            f'var _rootId={_json.dumps(file_id)};'
+            f'var _rootName={_json.dumps(file_name)};'
+            # Stack of {{id, name}} for breadcrumb
+            'var _stack=[];'
+            # Skeleton HTML helper
+            'var _skelItem=\'<div class="sri"><div class="sri-icon"><div class="sk" style="width:32px;height:32px;border-radius:6px"></div></div><div class="sri-info"><div class="sk sk-n" style="margin-bottom:6px"></div><div class="sk sk-s"></div></div></div>\';'
+            # Progress bar
+            'function _bar(on){var b=document.getElementById("bar");b.className=on?"on":"done";if(!on)setTimeout(()=>b.className="",800);}'
+            # Format size
+            'function _sz(b){if(!b)return"";b=parseInt(b);if(b<1048576)return(b>>10)+" KB";if(b<1073741824)return(b>>20)+" MB";return(b>>30)+" GB";}'
+            # Render file-type icons inline (simple emoji/SVG fallback)
+            f'var _IC={{folder:`{ic_folder_b64}`,back:`{ic_back_b64}`,dl:`{ic_dl_b64}`,file:`{ic_file_b64}`}};'
+            # Navigate into a subfolder or back to root
+            'async function _nav(id,name,pushState){'
+            '  var wrap=document.getElementById("spub-list-wrap");'
+            '  _bar(true);'
+            '  wrap.style.opacity="0";'
+            '  await new Promise(r=>setTimeout(r,120));'
+            '  wrap.innerHTML=\'<div id="spub-list">\'+_skelItem.repeat(6)+\'</div>\';'
+            '  wrap.style.opacity="1";'
+            '  try{'
+            '    var r=await fetch("/s/"+_tok+"/ls?sub="+encodeURIComponent(id));'
+            '    if(!r.ok)throw new Error("HTTP "+r.status);'
+            '    var items=await r.json();'
+            '    var html="";'
+            '    items.forEach(function(item){'
+            '      var fn=item.name.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");'
+            '      var dlUrl="/s/"+_tok+"/download?fid="+encodeURIComponent(item.id);'
+            '      var _m=item.mimeType||"";'
+            '      var _isText=_m.startsWith("text/")||_m.includes("json")||_m.includes("javascript")||_m.includes("xml")||_m.includes("python")||_m.includes("html")||_m.includes("css");'
+            '      var _thumbHtml=item.thumbnailLink&&!_isText'
+            '        ?\'<div class="sri-thumb-wrap"><img class="sri-thumb" src="\'+item.thumbnailLink+\'" alt="" loading="lazy" onerror="this.parentElement.style.display=\\\'none\\\'">\'+'
+            '         \'</div>\''
+            '        :item.ico;'
+            '      if(item.isFolder){'
+            '        html+=\'<div class="sri" style="cursor:pointer" onclick="_openFolder(\\\'\'+item.id+\'\\\',\\\'\'+item.name.replace(/\'/g,"&#39;")+\'\\\')"><div class="sri-icon">\'+_IC.folder+\'</div><div class="sri-info"><div class="sri-name">\'+fn+\'</div><div class="sri-meta"><span class="sri-size">Folder</span></div></div></div>\';'
+            '      } else if(item.previewable){'
+            '        var vUrl="/s/"+_tok+"/view?fid="+encodeURIComponent(item.id)+(id!==_rootId?"&sub="+encodeURIComponent(id):"");'
+            '        html+=\'<div class="sri" style="cursor:pointer" onclick="location.href=\\\'\'+vUrl+\'\\\'"><div class="sri-icon">\'+_thumbHtml+\'</div><div class="sri-info"><div class="sri-name">\'+fn+\'</div><div class="sri-meta"><span class="sri-size">\'+_sz(item.size)+\'</span></div></div><a href="\'+dlUrl+\'" class="sri-dl-btn" onclick="event.stopPropagation()" title="Download">\'+_IC.dl+\'</a></div>\';'
+            '      } else {'
+            '        html+=\'<a class="sri" href="\'+dlUrl+\'" style="text-decoration:none"><div class="sri-icon">\'+_thumbHtml+\'</div><div class="sri-info"><div class="sri-name">\'+fn+\'</div><div class="sri-meta"><span class="sri-size">\'+_sz(item.size)+\'</span></div></div><span class="btn-icon sri-dl-btn" style="pointer-events:none">\'+_IC.dl+\'</span></a>\';'
+            '      }'
+            '    });'
+            '    if(!html)html=\'<div class="empty"><h3 style="color:var(--text2)">Empty folder</h3></div>\';'
+            '    wrap.style.opacity="0";'
+            '    await new Promise(r=>setTimeout(r,100));'
+            '    document.getElementById("spub-list").innerHTML=html;'
+            '    wrap.style.opacity="1";'
+            '  }catch(e){'
+            '    wrap.style.opacity="0";'
+            '    await new Promise(r=>setTimeout(r,80));'
+            '    document.getElementById("spub-list").innerHTML=\'<div class="empty"><h3 style="color:var(--text2)">Failed to load</h3></div>\';'
+            '    wrap.style.opacity="1";'
+            '  }'
+            '  _bar(false);'
+            '}'
+            'function _openFolder(id,name){'
+            '  _stack.push({id:id,name:name});'
+            '  _updateHeader();'
+            '  _nav(id,name,true);'
+            '}'
+            'function _goBack(){'
+            '  if(_stack.length===0)return;'
+            '  _stack.pop();'
+            '  var prev=_stack.length>0?_stack[_stack.length-1]:{id:_rootId,name:_rootName};'
+            '  _updateHeader();'
+            '  _nav(prev.id,prev.name,false);'
+            '}'
+            'function _updateHeader(){'
+            '  var title=document.getElementById("spub-title");'
+            '  var backDiv=document.getElementById("spub-back");'
+            '  var backLabel=document.getElementById("spub-back-label");'
+            '  if(_stack.length>0){'
+            '    title.textContent=_stack[_stack.length-1].name;'
+            '    var parentName=_stack.length>1?_stack[_stack.length-2].name:_rootName;'
+            '    backLabel.textContent="Back to "+parentName;'
+            '    backDiv.style.display="block";'
+            '    document.getElementById("spub-back-a").onclick=function(){_goBack();};'
+            '  } else {'
+            '    title.textContent=_rootName;'
+            '    backDiv.style.display="none";'
+            '  }'
+            '}'
+            f'(async function(){{'
+            f'  var initId={_json.dumps(current_folder_id)};'
+            f'  var initName={_json.dumps(current_name)};'
+            f'  if(initId!==_rootId){{'
+            f'    _stack.push({{id:initId,name:initName}});'
+            f'    _updateHeader();'
+            f'  }}'
+            f'  await _nav(initId,initName,false);'
+            f'}})();'
+            '</script>'
+        )
+        return _share_page(body, current_name)
+
+    # File — previewable types open straight into the in-page player;
+    # everything else shows a download card.
+    preview_kind = _get_share_preview_kind(mime, file_name)
+    if preview_kind:
+        return _build_share_player_page(
+            token=token,
+            title=file_name,
+            files=[{"id": file_id, "name": file_name, "mimeType": mime}],
+            auto_fid=file_id,
+        )
+
+    dl_url = f"/s/{token}/download"
+    file_ico = _file_icon(mime, 28, file_name)
+    body = (
+        '<div class="share-spub-page"><div class="spub-card">'
+        f'<div class="spub-icon">{file_ico}</div>'
+        f'<div class="spub-name">{file_name}</div>'
+        f'<div class="spub-meta">Shared file</div>'
+        f'<a class="btn btn-primary btn-wide" style="height:46px;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none" href="{dl_url}">'
+        f'{_icon("download", 16)}'
+        f' Download</a>'
+        '</div></div>'
+    )
+    return _share_page(body, file_name)
+
+
+async def handle_share_folder_file_view(request: web.Request) -> web.Response:
+    """GET /s/{token}/view?fid=... — open a specific file from a folder share
+    in the in-page player, with a back link to the folder listing."""
+    token = request.match_info["token"]
+    db: Database = request.app["db"]
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+
+    doc = await db.get_share_link(token)
+    if not doc:
+        raise web.HTTPNotFound()
+    if not _share_password_ok(request, doc):
+        return _share_page(_share_password_form(token), "Protected link")
+    if not doc.get("is_folder"):
+        raise web.HTTPNotFound()
+
+    fid = request.rel_url.query.get("fid", "")
+    sub_param = request.rel_url.query.get("sub", "")
+    if not fid:
+        raise web.HTTPNotFound()
+    uid, di, folder_id = doc["user_id"], doc.get("drive_index", 0), doc["file_id"]
+
+    meta = await _share_validate_child(gdrive, uid, di, folder_id, fid)
+    if not meta:
+        raise web.HTTPNotFound()
+
+    # List siblings from the actual current folder (subfolder if ?sub= was passed)
+    current_folder_id = sub_param if sub_param else folder_id
+    try:
+        siblings = await gdrive.list_folder_contents(uid, current_folder_id, di)
+    except Exception:
+        siblings = [meta]
+
+    name = meta.get("name", "file")
+    back_url = f"/s/{token}?sub={sub_param}" if sub_param else f"/s/{token}"
+    return _build_share_player_page(
+        token=token,
+        title=name,
+        files=[{"id": s["id"], "name": s.get("name", ""), "mimeType": s.get("mimeType", "")} for s in siblings],
+        auto_fid=fid,
+        back_url=back_url,
+    )
+
+
+async def handle_share_unlock(request: web.Request) -> web.Response:
+    """POST /s/{token} — verify password, set cookie, redirect."""
+    token = request.match_info["token"]
+    db: Database = request.app["db"]
+    doc = await db.get_share_link(token)
+    if not doc:
+        raise web.HTTPNotFound()
+    body = await request.post()
+    import hashlib
+    pw = (body.get("password") or "").strip()
+    if not doc.get("password_hash") or hashlib.sha256(pw.encode()).hexdigest() != doc["password_hash"]:
+        return _share_page(_share_password_form(token, "Incorrect password."), "Protected link")
+    resp = web.HTTPFound(f"/s/{token}")
+    resp.set_cookie("spw_" + token, _share_sign_pw(token),
+                    max_age=86400, httponly=True, samesite="Lax")
+    raise resp
+
+
+async def _share_resolve_fid(request: web.Request, doc: dict) -> tuple[str, int, int]:
+    """Resolve and validate the file id, user id and drive index a public
+    preview/download request is allowed to touch for the given share doc.
+    Raises HTTPNotFound if a folder-share's ?fid= isn't a direct child of it."""
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+    uid = doc["user_id"]
+    di  = doc.get("drive_index", 0)
+    if doc.get("is_folder"):
+        fid = request.rel_url.query.get("fid", "")
+        if not fid:
+            raise web.HTTPNotFound()
+        meta = await _share_validate_child(gdrive, uid, di, doc["file_id"], fid)
+        if not meta:
+            raise web.HTTPNotFound()
+        return fid, uid, di
+    return doc["file_id"], uid, di
+
+
+async def handle_share_preview(request: web.Request) -> web.Response:
+    """GET /s/{token}/preview?fid=... — stream a shared file inline for the
+    in-page player (images/video/audio/text), with Range support."""
+    import aiohttp as _aiohttp
+    token = request.match_info["token"]
+    db:     Database           = request.app["db"]
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+
+    doc = await db.get_share_link(token)
+    if not doc:
+        raise web.HTTPNotFound()
+    if not _share_password_ok(request, doc):
+        raise web.HTTPForbidden(reason="Password required")
+
+    fid, uid, di = await _share_resolve_fid(request, doc)
+
+    try:
+        meta         = await gdrive.get_file_meta_for_download(uid, fid, di)
+        mime         = meta.get("mimeType", "")
+        access_token = meta.get("access_token", "")
+        file_id      = meta.get("id", fid)
+        file_name    = meta.get("name", fid)
+        serve_mime   = mime or "application/octet-stream"
+
+        gdrive_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+        req_headers = {"Authorization": f"Bearer {access_token}"}
+        range_hdr = request.headers.get("Range")
+        if range_hdr:
+            req_headers["Range"] = range_hdr
+
+        async with _aiohttp.ClientSession() as session:
+            async with session.get(gdrive_url, headers=req_headers) as gr:
+                if gr.status == 403:
+                    abuse_url = gdrive_url + "&acknowledgeAbuse=true"
+                    async with session.get(abuse_url, headers=req_headers) as gr2:
+                        gr = gr2
+
+                resp_headers = {
+                    "Content-Disposition": f'inline; filename="{urllib.parse.quote(file_name)}"',
+                    "Content-Type": gr.headers.get("Content-Type", serve_mime),
+                }
+                for h in ("Content-Length", "Content-Range", "Accept-Ranges"):
+                    if h in gr.headers:
+                        resp_headers[h] = gr.headers[h]
+
+                response = web.StreamResponse(status=gr.status, headers=resp_headers)
+                await response.prepare(request)
+                async for chunk in gr.content.iter_chunked(65536):
+                    await response.write(chunk)
+                await response.write_eof()
+                return response
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"handle_share_preview: {e}", exc_info=True)
+        raise web.HTTPInternalServerError(reason=str(e))
+
+
+async def handle_share_download(request: web.Request) -> web.Response:
+    """GET /s/{token}/download?fid=... — stream the shared file as an attachment."""
+    import aiohttp as _aiohttp
+    token = request.match_info["token"]
+    db:     Database           = request.app["db"]
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+
+    doc = await db.get_share_link(token)
+    if not doc:
+        raise web.HTTPNotFound()
+    if not _share_password_ok(request, doc):
+        raise web.HTTPForbidden(reason="Password required")
+
+    fid, uid, di = await _share_resolve_fid(request, doc)
+
+    try:
+        meta         = await gdrive.get_file_meta_for_download(uid, fid, di)
+        mime         = meta.get("mimeType", "")
+        export_map   = meta.get("export_map", {})
+        access_token = meta.get("access_token", "")
+        file_id      = meta.get("id", fid)
+        file_name    = meta.get("name", fid)
+
+        if mime in export_map:
+            export_mime, ext = export_map[mime]
+            gdrive_url = (f"https://www.googleapis.com/drive/v3/files/{file_id}/export"
+                          f"?alt=media&mimeType={urllib.parse.quote(export_mime)}")
+            if not file_name.endswith(ext):
+                file_name += ext
+        else:
+            gdrive_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+
+        req_headers = {"Authorization": f"Bearer {access_token}"}
+        async with _aiohttp.ClientSession() as session:
+            async with session.get(gdrive_url, headers=req_headers) as gr:
+                if gr.status == 403:
+                    abuse_url = gdrive_url + "&acknowledgeAbuse=true"
+                    async with session.get(abuse_url, headers=req_headers) as gr2:
+                        gr = gr2
+                if gr.status != 200:
+                    raise web.HTTPBadGateway(reason="Drive download failed")
+                resp_headers = {
+                    "Content-Type": gr.headers.get("Content-Type", "application/octet-stream"),
+                    "Content-Disposition": f'attachment; filename="{urllib.parse.quote(file_name)}"',
+                }
+                if "Content-Length" in gr.headers:
+                    resp_headers["Content-Length"] = gr.headers["Content-Length"]
+                response = web.StreamResponse(headers=resp_headers)
+                await response.prepare(request)
+                async for chunk in gr.content.iter_chunked(65536):
+                    await response.write(chunk)
+                await response.write_eof()
+                return response
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"handle_share_download: {e}", exc_info=True)
+        raise web.HTTPInternalServerError(reason=str(e))
+
+
+async def handle_share_ls(request: web.Request) -> web.Response:
+    """GET /s/{token}/ls?sub=<folder_id> — return JSON list of items in a shared folder.
+    Used by the AJAX client-side navigation on the public share page."""
+    import json as _json
+    token  = request.match_info["token"]
+    db:     Database           = request.app["db"]
+    gdrive: GoogleDriveManager = request.app["gdrive"]
+
+    doc = await db.get_share_link(token)
+    if not doc:
+        raise web.HTTPNotFound()
+    if not _share_password_ok(request, doc):
+        raise web.HTTPForbidden(reason="Password required")
+    if not doc.get("is_folder"):
+        raise web.HTTPBadRequest(reason="Not a folder share")
+
+    uid      = doc["user_id"]
+    di       = doc.get("drive_index", 0)
+    root_id  = doc["file_id"]
+    sub_param = request.rel_url.query.get("sub", "").strip()
+    target_id = sub_param if sub_param else root_id
+
+    # Security: verify target_id is accessible from the share root
+    if target_id != root_id:
+        meta = await _share_validate_child(gdrive, uid, di, root_id, target_id)
+        if not meta:
+            raise web.HTTPForbidden(reason="Folder not in share tree")
+
+    try:
+        items = await gdrive.list_folder_contents(uid, target_id, di)
+    except Exception:
+        items = []
+
+    result = []
+    for item in items:
+        item_mime = item.get("mimeType", "")
+        is_fol    = "folder" in item_mime
+        preview_kind = _get_share_preview_kind(item_mime, item.get("name", "")) if not is_fol else None
+        # Build a small inline SVG/HTML icon string for each item
+        if is_fol:
+            ico_html = _icon("folder", 28, "", "#0386c3")
+        else:
+            ico_html = _file_icon(item_mime, 28, item.get("name", ""))
+        result.append({
+            "id":            item["id"],
+            "name":          item.get("name", ""),
+            "mimeType":      item_mime,
+            "size":          item.get("size"),
+            "isFolder":      is_fol,
+            "previewable":   bool(preview_kind),
+            "ico":           ico_html,
+            "thumbnailLink": item.get("thumbnailLink", ""),
+        })
+
+    # Folders first, then alphabetical
+    result.sort(key=lambda x: (0 if x["isFolder"] else 1, x["name"].lower()))
+    return web.Response(
+        content_type="application/json",
+        text=_json.dumps(result),
+    )
+
+
 def create_app(db: Database, gdrive: GoogleDriveManager, bot=None) -> web.Application:
     import os
     app = web.Application(client_max_size=Config.MAX_FILE_SIZE + 10 * 1024 * 1024)
@@ -3293,4 +4795,16 @@ def create_app(db: Database, gdrive: GoogleDriveManager, bot=None) -> web.Applic
     app.router.add_post("/api/upload",           api_upload)
     app.router.add_get("/api/search",            api_search)
     app.router.add_get("/api/storage",           api_storage)
+    # Share link routes
+    # Share link routes
+    app.router.add_get("/api/share/{type}/{id}",    api_share_get)
+    app.router.add_post("/api/share/{type}/{id}",   api_share_post)
+    app.router.add_delete("/api/share/{type}/{id}", api_share_delete)
+    app.router.add_get("/api/shares",               api_list_shares)
+    app.router.add_get("/s/{token}",                handle_share_view)
+    app.router.add_post("/s/{token}",               handle_share_unlock)
+    app.router.add_get("/s/{token}/ls",             handle_share_ls)
+    app.router.add_get("/s/{token}/view",           handle_share_folder_file_view)
+    app.router.add_get("/s/{token}/preview",        handle_share_preview)
+    app.router.add_get("/s/{token}/download",       handle_share_download)
     return app

@@ -67,19 +67,6 @@ class GoogleDriveManager:
     def __init__(self, db: Database):
         self.db = db
 
-    def get_auth_url(self):
-        flow = Flow.from_client_config(
-            _client_config(),
-            scopes=Config.GOOGLE_SCOPES,
-            redirect_uri=Config.OAUTH_REDIRECT_URI,
-        )
-        auth_url, state = flow.authorization_url(
-            access_type="offline",
-            include_granted_scopes="true",
-            prompt="consent",
-        )
-        return auth_url, flow, state
-
     def get_auth_url_for_web(self):
         """Like get_auth_url but uses the WebUI OAuth callback URL."""
         web_redirect = f"{Config.WEBUI_BASE_URL}/oauth/callback"
@@ -209,7 +196,7 @@ class GoogleDriveManager:
             kwargs = dict(
                 q=f"'{folder_id}' in parents and trashed = false",
                 pageSize=_ps,
-                fields="nextPageToken, files(id, name, mimeType, size, webViewLink, webContentLink, modifiedTime, parents)",
+                fields="nextPageToken, files(id, name, mimeType, size, webViewLink, webContentLink, modifiedTime, parents, thumbnailLink, hasThumbnail)",
                 orderBy="folder,name",
             )
             if page_token:
@@ -550,8 +537,79 @@ class GoogleDriveManager:
             result = svc.files().list(
                 q=f"name contains '{safe}' and trashed = false",
                 pageSize=50,
-                fields="files(id, name, mimeType, size, modifiedTime, parents)",
+                fields="files(id, name, mimeType, size, modifiedTime, parents, thumbnailLink, hasThumbnail)",
                 orderBy="modifiedTime desc",
+            ).execute()
+            return result.get("files", [])
+
+        return await _run_sync(_call)
+
+    async def set_file_shared(self, user_id: int, file_id: str, drive_index: int = None) -> bool:
+        """Grant anyone-with-link reader access to a Drive file/folder."""
+        creds = await self._get_credentials(user_id, drive_index)
+        if not creds:
+            raise PermissionError("Not authenticated.")
+
+        def _call():
+            svc = self._service("drive", "v3", creds)
+            # Check if permission already exists
+            perms = svc.permissions().list(fileId=file_id, fields="permissions(id,type,role)").execute()
+            for p in perms.get("permissions", []):
+                if p.get("type") == "anyone":
+                    return True  # already public
+            svc.permissions().create(
+                fileId=file_id,
+                body={"type": "anyone", "role": "reader"},
+                fields="id",
+            ).execute()
+            return True
+
+        return await _run_sync(_call)
+
+    async def set_file_private(self, user_id: int, file_id: str, drive_index: int = None) -> bool:
+        """Remove anyone-with-link access from a Drive file/folder."""
+        creds = await self._get_credentials(user_id, drive_index)
+        if not creds:
+            raise PermissionError("Not authenticated.")
+
+        def _call():
+            svc = self._service("drive", "v3", creds)
+            perms = svc.permissions().list(fileId=file_id, fields="permissions(id,type)").execute()
+            for p in perms.get("permissions", []):
+                if p.get("type") == "anyone":
+                    try:
+                        svc.permissions().delete(fileId=file_id, permissionId=p["id"]).execute()
+                    except Exception:
+                        pass
+            return True
+
+        return await _run_sync(_call)
+
+    async def get_file_web_link(self, user_id: int, file_id: str, drive_index: int = None) -> str | None:
+        """Return the webViewLink for a Drive file/folder."""
+        creds = await self._get_credentials(user_id, drive_index)
+        if not creds:
+            raise PermissionError("Not authenticated.")
+
+        def _call():
+            svc = self._service("drive", "v3", creds)
+            return svc.files().get(fileId=file_id, fields="webViewLink").execute().get("webViewLink")
+
+        return await _run_sync(_call)
+
+    async def list_folder_contents(self, user_id: int, folder_id: str, drive_index: int = None) -> list:
+        """List files inside a shared folder (for the public share page)."""
+        creds = await self._get_credentials(user_id, drive_index)
+        if not creds:
+            raise PermissionError("Not authenticated.")
+
+        def _call():
+            svc = self._service("drive", "v3", creds)
+            result = svc.files().list(
+                q=f"'{folder_id}' in parents and trashed = false",
+                pageSize=100,
+                fields="files(id, name, mimeType, size, modifiedTime, thumbnailLink, hasThumbnail)",
+                orderBy="folder,name",
             ).execute()
             return result.get("files", [])
 

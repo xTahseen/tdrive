@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def register(app: Client):
 
-    @app.on_callback_query(~filters.regex(r"^fm:") & ~filters.regex(r"^storage:") & ~filters.regex(r"^upload:") & ~filters.regex(r"^sr:") & ~filters.regex(r"^search:"))
+    @app.on_callback_query(~filters.regex(r"^fm:") & ~filters.regex(r"^storage:") & ~filters.regex(r"^upload:") & ~filters.regex(r"^sr:") & ~filters.regex(r"^search:") & ~filters.regex(r"^webui:"))
     async def callback_handler(client: Client, query: CallbackQuery):
         user_id = query.from_user.id
         data = query.data
@@ -18,31 +18,6 @@ def register(app: Client):
             await query.message.reply_text(
                 "Use /drives to connect a Google Drive account."
             )
-
-        elif data == "cancel_auth":
-            await query.answer("Cancelled.")
-            from .cmd_auth import _pending_flows
-            _pending_flows.pop(user_id, None)
-            await client.db.clear_awaiting_code(user_id)
-            await query.message.edit_text("❌ Authorization cancelled.")
-
-        elif data == "logout_confirm":
-            await query.answer()
-            active = await client.db.get_active_drive_index(user_id)
-            await client.db.delete_token(user_id, active)
-            await client.db.clear_awaiting_code(user_id)
-            from .cmd_auth import _pending_flows
-            _pending_flows.pop(user_id, None)
-            drives_left = await client.db.get_all_drives(user_id)
-            if drives_left:
-                await query.message.edit_text(
-                    f"✅ Drive disconnected. {len(drives_left)} account(s) remaining.\n"
-                    "Use /drives to manage them."
-                )
-            else:
-                await query.message.edit_text(
-                    "✅ Logged out. Use /drives to connect again."
-                )
 
         elif data == "cancel_action":
             await query.answer("Cancelled.")
@@ -66,7 +41,6 @@ def register(app: Client):
 
             if action == "list":
                 await query.answer()
-                await client.db.set_awaiting_code(user_id)
                 from .cmd_drives import build_drives_message
                 text, keyboard = await build_drives_message(client, user_id)
                 await query.message.edit_text(text, reply_markup=keyboard)
@@ -77,7 +51,6 @@ def register(app: Client):
                 drives = await client.db.get_all_drives(user_id)
                 email = drives[idx].get("email", f"Drive {idx+1}") if idx < len(drives) else "?"
                 await query.answer(f"⭐ {email} set as default.", show_alert=False)
-                await client.db.set_awaiting_code(user_id)
                 from .cmd_drives import build_drives_message
                 text, keyboard = await build_drives_message(client, user_id)
                 await query.message.edit_text(text, reply_markup=keyboard)
@@ -90,7 +63,6 @@ def register(app: Client):
 
             elif action == "add_retry":
                 await query.answer()
-                await client.db.set_awaiting_code(user_id)
                 from .cmd_drives import build_drives_message
                 text, keyboard = await build_drives_message(client, user_id)
                 await query.message.edit_text(text, reply_markup=keyboard)
@@ -114,13 +86,7 @@ def register(app: Client):
                 drives = await client.db.get_all_drives(user_id)
                 email = drives[idx].get("email", f"Drive {idx+1}") if idx < len(drives) else "?"
                 await client.db.delete_token(user_id, idx)
-                # Clear awaiting_code so auth state is clean after removal
-                await client.db.clear_awaiting_code(user_id)
-                from .cmd_auth import _pending_flows
-                _pending_flows.pop(user_id, None)
                 await query.answer(f"✅ {email} removed.", show_alert=False)
-                # Set awaiting_code fresh for the new connect button we're about to show
-                await client.db.set_awaiting_code(user_id)
                 from .cmd_drives import build_drives_message
                 text, keyboard = await build_drives_message(client, user_id)
                 await query.message.edit_text(text, reply_markup=keyboard)

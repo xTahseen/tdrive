@@ -1,4 +1,3 @@
-
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -21,17 +20,10 @@ async def build_drives_message(client, user_id: int):
         ])
 
     try:
-        auth_url, flow, state = client.gdrive.get_auth_url()
-        # Store the flow in memory so it's ready when user clicks the link.
-        # Do NOT call set_awaiting_code here — that's only set when the user
-        # actually clicks "Connect" and we expect a code/URL back from them.
-        from .cmd_auth import _pending_flows
-        _pending_flows[user_id] = {"flow": flow, "state": state, "mode": "add_drive"}
-        # Also persist state to DB so the WebUI callback can resolve the user
-        # even if OAUTH_REDIRECT_URI points to the webui endpoint
+        auth_url, flow, state = client.gdrive.get_auth_url_for_web()
         await client.db.save_oauth_state(user_id, state)
         rows.append([InlineKeyboardButton("☁️ Connect to Gdrive", url=auth_url)])
-        footer = "Copy the full URL from your browser's address bar and paste it here."
+        footer = "Click **Connect to Gdrive** to link a Google account via the WebUI."
     except Exception as e:
         logger.error(f"Failed to generate auth URL: {e}")
         rows.append([InlineKeyboardButton("☁️ Connect to Gdrive (retry)", callback_data="drive:add_retry")])
@@ -40,7 +32,7 @@ async def build_drives_message(client, user_id: int):
     if not drives:
         text = "☁️ **Google Drive Accounts**\n\nNo accounts connected yet.\n\n" + footer
     else:
-        text = f"☁️ **Google Drive Accounts**\n\n" + footer
+        text = "☁️ **Google Drive Accounts**\n\n" + footer
 
     return text, InlineKeyboardMarkup(rows)
 
@@ -49,7 +41,5 @@ def register(app: Client):
 
     @app.on_message(filters.command("drives") & filters.private)
     async def drives_handler(client: Client, message: Message):
-        # Set awaiting_code so the bot knows to expect the OAuth redirect URL
-        await client.db.set_awaiting_code(message.from_user.id)
         text, keyboard = await build_drives_message(client, message.from_user.id)
         await message.reply_text(text, reply_markup=keyboard)
