@@ -1261,6 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       load();
     }
+    _loadSharedIds();
   }
 });
 """
@@ -3856,12 +3857,61 @@ async def api_list_shares(request: web.Request) -> web.Response:
 
 # ─── Public share page ────────────────────────────────────────────────────────
 
-def _share_page(body, title="Shared"):
+def _share_base_url():
+    # Reuse the WEBUI_BASE_URL convention used elsewhere in the bot, but
+    # strip any path it might already carry (it may be set to something
+    # like "https://host/drives").
+    raw = Config.WEBUI_BASE_URL or ""
+    if raw:
+        for cut in ("/drives", "/drive", "/files"):
+            idx = raw.find(cut)
+            if idx != -1:
+                raw = raw[:idx]
+                break
+        return raw.rstrip("/")
+    return ""
+
+
+def _og_meta_tags(title, description, url_path="", image_path="/static/logo.png"):
+    """Build Open Graph / Twitter Card meta tags so links unfurl nicely when
+    shared on Telegram, WhatsApp, Discord, X, etc. Uses absolute URLs where
+    possible (via WEBUI_BASE_URL) since most crawlers ignore relative ones."""
+    import html as _html
+    base = _share_base_url()
+    image_url = f"{base}{image_path}" if base else image_path
+    page_url  = f"{base}{url_path}" if base else url_path
+    t = _html.escape(title, quote=True)
+    d = _html.escape(description, quote=True)
+    tags = (
+        f"<meta property='og:title' content='{t}'>"
+        f"<meta property='og:description' content='{d}'>"
+        f"<meta property='og:image' content='{image_url}'>"
+        "<meta property='og:type' content='website'>"
+        "<meta name='twitter:card' content='summary'>"
+        f"<meta name='twitter:title' content='{t}'>"
+        f"<meta name='twitter:description' content='{d}'>"
+        f"<meta name='twitter:image' content='{image_url}'>"
+    )
+    if page_url:
+        tags += f"<meta property='og:url' content='{page_url}'>"
+    return tags
+
+
+def _share_page(body, title="Shared", description=None, og_url=""):
+    desc = description or f"{title} was shared with you via Google Drive VIP."
+    og = _og_meta_tags(title, desc, url_path=og_url)
     return web.Response(content_type="text/html", text=(
         "<!DOCTYPE html><html lang='en'><head>"
         "<meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
-        f"<title>{title} — TDrive</title>"
+        f"<title>{title} — Google Drive VIP</title>"
+        "<link rel='icon' type='image/png' href='/static/favicon.png'>"
+        "<link rel='shortcut icon' href='/static/favicon.png'>"
+        "<link rel='apple-touch-icon' href='/static/favicon.png'>"
+        f"{og}"
+        "<link rel='preconnect' href='https://fonts.googleapis.com'>"
+        "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
+        "<link href='https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap' rel='stylesheet'>"
         f"<style>{_CSS}</style>"
         f"</head><body>{body}</body></html>"
     ))
@@ -3930,6 +3980,30 @@ async def _share_validate_child(gdrive: GoogleDriveManager, uid: int, di: int, f
             return None          # reached drive root without finding shared folder
         current_id = parents[0]  # Google Drive files have exactly one parent
     return None
+
+async def _share_crumb_chain(gdrive: GoogleDriveManager, uid: int, di: int, root_id: str, target_id: str) -> list:
+    """Full ancestor chain from (just below) the shared root down to target_id,
+    e.g. [{id,name}, ...] ordered root→leaf, excluding the root itself.
+    Returns [] if target_id is not reachable from root_id (invalid/forbidden)."""
+    if target_id == root_id:
+        return []
+    chain = []
+    current_id = target_id
+    for _ in range(20):
+        try:
+            node = await gdrive.get_file(uid, current_id, di)
+        except Exception:
+            return []
+        chain.append({"id": current_id, "name": node.get("name", "Folder")})
+        parents = node.get("parents") or []
+        if root_id in parents:
+            chain.reverse()
+            return chain
+        if not parents:
+            return []  # reached drive root without finding the shared folder
+        current_id = parents[0]
+    return []
+
 
 def _build_share_overlay_html() -> str:
     """The preview overlay markup, reused as-is from the authenticated file manager
@@ -4286,11 +4360,16 @@ document.addEventListener('DOMContentLoaded',function(){{
 }});
 """
 
+    _PLAYER_OG_DESC = "Shared via Google Drive VIP \u00b7 tap to preview."
     html = (
         "<!DOCTYPE html><html lang='en'><head>"
         "<meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
-        f"<title>{title} — TDrive</title>"
+        f"<title>{title} — Google Drive VIP</title>"
+        "<link rel='icon' type='image/png' href='/static/favicon.png'>"
+        "<link rel='shortcut icon' href='/static/favicon.png'>"
+        "<link rel='apple-touch-icon' href='/static/favicon.png'>"
+        f"{_og_meta_tags(title, _PLAYER_OG_DESC, url_path=f'/s/{token}')}"
         "<link rel='preconnect' href='https://fonts.googleapis.com'>"
         "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
         "<link href='https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap' rel='stylesheet'>"
@@ -4312,7 +4391,9 @@ async def handle_share_view(request: web.Request) -> web.Response:
                             content_type="text/html")
 
     if not _share_password_ok(request, doc):
-        return _share_page(_share_password_form(token), "Protected link")
+        return _share_page(_share_password_form(token), "Protected link",
+                           description="This link is password-protected \u00b7 Google Drive VIP",
+                           og_url=f"/s/{token}")
 
     file_id  = doc["file_id"]
     file_name = doc["file_name"]
@@ -4326,35 +4407,16 @@ async def handle_share_view(request: web.Request) -> web.Response:
         sub_param = request.rel_url.query.get("sub", "")
         current_folder_id = file_id
         current_name = file_name
+        init_chain = []  # full ancestor chain (root excluded) for breadcrumb bootstrap
         if sub_param:
-            # Verify the requested subfolder is actually a child of the shared root
-            # by listing the root and walking down one level
             try:
-                root_items = await gdrive.list_folder_contents(uid, file_id, di)
-                valid_sub_ids = {item["id"] for item in root_items if "folder" in item.get("mimeType", "")}
-                if sub_param not in valid_sub_ids:
-                    # Try one more level deep (grandchildren)
-                    valid_sub_ids_deep = set()
-                    for sid in valid_sub_ids:
-                        try:
-                            children = await gdrive.list_folder_contents(uid, sid, di)
-                            for c in children:
-                                if "folder" in c.get("mimeType", ""):
-                                    valid_sub_ids_deep.add(c["id"])
-                        except Exception:
-                            pass
-                    if sub_param not in valid_sub_ids_deep:
-                        return web.Response(text="Subfolder not found.", status=404, content_type="text/html")
-                # Get the subfolder name from the items we already fetched
-                for item in root_items:
-                    if item["id"] == sub_param:
-                        current_name = item.get("name", "Folder")
-                        break
-                else:
-                    current_name = "Folder"
-                current_folder_id = sub_param
+                init_chain = await _share_crumb_chain(gdrive, uid, di, file_id, sub_param)
             except Exception:
-                pass
+                init_chain = []
+            if not init_chain:
+                return web.Response(text="Subfolder not found.", status=404, content_type="text/html")
+            current_name = init_chain[-1]["name"]
+            current_folder_id = sub_param
 
         # Render folder listing — AJAX-powered single-page navigation
         import json as _json
@@ -4375,11 +4437,8 @@ async def handle_share_view(request: web.Request) -> web.Response:
             f'<div style="font-size:18px;font-weight:700" id="spub-title">{file_name}</div>'
             '<div style="font-size:12px;color:var(--text3)">Shared folder · view only</div>'
             '</div></div>'
-            # Breadcrumb back link
-            '<div id="spub-back" style="display:none;margin-bottom:12px">'
-            f'<a id="spub-back-a" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);text-decoration:none;cursor:pointer">'
-            f'{_icon("back", 14)} <span id="spub-back-label">Back</span></a>'
-            '</div>'
+            # Breadcrumb trail — hidden at root, shown once inside a subfolder
+            '<div id="spub-back" style="display:none;align-items:center;gap:6px;overflow-x:auto;margin-bottom:10px;font-size:13px;color:var(--text2)"></div>'
             # File list container (animated)
             '<div id="spub-list-wrap" style="border:1px solid var(--border);border-radius:var(--r12);overflow:hidden;transition:opacity .18s ease">'
             '<div id="spub-list"></div>'
@@ -4448,40 +4507,56 @@ async def handle_share_view(request: web.Request) -> web.Response:
             '  _updateHeader();'
             '  _nav(id,name,true);'
             '}'
-            'function _goBack(){'
-            '  if(_stack.length===0)return;'
-            '  _stack.pop();'
-            '  var prev=_stack.length>0?_stack[_stack.length-1]:{id:_rootId,name:_rootName};'
+            'function _escHtml(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}'
+            'function _jumpTo(idx){'
+            '  _stack = idx<0 ? [] : _stack.slice(0, idx+1);'
+            '  var target = _stack.length>0 ? _stack[_stack.length-1] : {id:_rootId,name:_rootName};'
             '  _updateHeader();'
-            '  _nav(prev.id,prev.name,false);'
+            '  _nav(target.id,target.name,true);'
             '}'
             'function _updateHeader(){'
             '  var title=document.getElementById("spub-title");'
-            '  var backDiv=document.getElementById("spub-back");'
-            '  var backLabel=document.getElementById("spub-back-label");'
+            '  var bc=document.getElementById("spub-back");'
             '  if(_stack.length>0){'
             '    title.textContent=_stack[_stack.length-1].name;'
-            '    var parentName=_stack.length>1?_stack[_stack.length-2].name:_rootName;'
-            '    backLabel.textContent="Back to "+parentName;'
-            '    backDiv.style.display="block";'
-            '    document.getElementById("spub-back-a").onclick=function(){_goBack();};'
+            '    var html=\'<span class="bc-crumb" onclick="_jumpTo(-1)">\'+_escHtml(_rootName)+\'</span>\';'
+            '    _stack.forEach(function(c,i){'
+            '      var last=i===_stack.length-1;'
+            '      html+=\'<span class="bc-sep">\\u203a</span>\';'
+            '      html+=last'
+            '        ? \'<span class="bc-crumb last">\'+_escHtml(c.name)+\'</span>\''
+            '        : \'<span class="bc-crumb" onclick="_jumpTo(\'+i+\')">\'+_escHtml(c.name)+\'</span>\';'
+            '    });'
+            '    bc.innerHTML=html;'
+            '    bc.style.display="flex";'
             '  } else {'
             '    title.textContent=_rootName;'
-            '    backDiv.style.display="none";'
+            '    bc.innerHTML="";'
+            '    bc.style.display="none";'
             '  }'
             '}'
             f'(async function(){{'
             f'  var initId={_json.dumps(current_folder_id)};'
             f'  var initName={_json.dumps(current_name)};'
-            f'  if(initId!==_rootId){{'
-            f'    _stack.push({{id:initId,name:initName}});'
+            f'  var initChain={_json.dumps(init_chain)};'
+            f'  if(initChain.length>0){{'
+            f'    _stack=initChain;'
             f'    _updateHeader();'
             f'  }}'
             f'  await _nav(initId,initName,false);'
             f'}})();'
             '</script>'
         )
-        return _share_page(body, current_name)
+        try:
+            n_items = len(await gdrive.list_folder_contents(uid, current_folder_id, di))
+        except Exception:
+            n_items = 0
+        item_desc = f"{n_items} item{'s' if n_items != 1 else ''} \u00b7 Shared folder via Google Drive VIP"
+        return _share_page(
+            body, current_name,
+            description=item_desc,
+            og_url=f"/s/{token}",
+        )
 
     # File — previewable types open straight into the in-page player;
     # everything else shows a download card.
@@ -4496,17 +4571,26 @@ async def handle_share_view(request: web.Request) -> web.Response:
 
     dl_url = f"/s/{token}/download"
     file_ico = _file_icon(mime, 28, file_name)
+    try:
+        meta = await gdrive.get_file(uid, file_id, di)
+        size_str = _fmt_size(meta.get("size"))
+    except Exception:
+        size_str = ""
     body = (
         '<div class="share-spub-page"><div class="spub-card">'
         f'<div class="spub-icon">{file_ico}</div>'
         f'<div class="spub-name">{file_name}</div>'
-        f'<div class="spub-meta">Shared file</div>'
+        f'<div class="spub-meta">{size_str or "Shared file"}</div>'
         f'<a class="btn btn-primary btn-wide" style="height:46px;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none" href="{dl_url}">'
         f'{_icon("download", 16)}'
         f' Download</a>'
         '</div></div>'
     )
-    return _share_page(body, file_name)
+    return _share_page(
+        body, file_name,
+        description=f"{size_str} \u00b7 Shared via Google Drive VIP" if size_str else "Shared via Google Drive VIP",
+        og_url=f"/s/{token}",
+    )
 
 
 async def handle_share_folder_file_view(request: web.Request) -> web.Response:
@@ -4520,7 +4604,9 @@ async def handle_share_folder_file_view(request: web.Request) -> web.Response:
     if not doc:
         raise web.HTTPNotFound()
     if not _share_password_ok(request, doc):
-        return _share_page(_share_password_form(token), "Protected link")
+        return _share_page(_share_password_form(token), "Protected link",
+                           description="This link is password-protected \u00b7 Google Drive VIP",
+                           og_url=f"/s/{token}")
     if not doc.get("is_folder"):
         raise web.HTTPNotFound()
 
@@ -4563,7 +4649,9 @@ async def handle_share_unlock(request: web.Request) -> web.Response:
     import hashlib
     pw = (body.get("password") or "").strip()
     if not doc.get("password_hash") or hashlib.sha256(pw.encode()).hexdigest() != doc["password_hash"]:
-        return _share_page(_share_password_form(token, "Incorrect password."), "Protected link")
+        return _share_page(_share_password_form(token, "Incorrect password."), "Protected link",
+                           description="This link is password-protected \u00b7 Google Drive VIP",
+                           og_url=f"/s/{token}")
     resp = web.HTTPFound(f"/s/{token}")
     resp.set_cookie("spw_" + token, _share_sign_pw(token),
                     max_age=86400, httponly=True, samesite="Lax")
