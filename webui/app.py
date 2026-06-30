@@ -35,8 +35,10 @@ def _verify(token: str) -> dict | None:
     except Exception:
         return None
 
-def _make_token(uid: int) -> str:
-    return _sign({"uid": uid, "exp": time.time() + 86400 * 7})
+SESSION_TTL = 6 * 3600  # 6 hours — both the cookie's max_age and the signed exp claim
+
+def _make_token(uid: int, ver: int = 0) -> str:
+    return _sign({"uid": uid, "ver": ver, "exp": time.time() + SESSION_TTL})
 
 def _hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -51,6 +53,15 @@ def require_auth(handler):
     async def wrapper(request: web.Request):
         tok = request.cookies.get("session")
         payload = _verify(tok) if tok else None
+        if payload:
+            # Signature + exp alone can't detect "credentials were changed or
+            # cleared since this cookie was issued" — that needs a live check
+            # against session_version, which database.py bumps on credential
+            # set/clear via /webui.
+            db: Database = request.app["db"]
+            current_ver = await db.get_webui_session_version()
+            if payload.get("ver", 0) != current_ver:
+                payload = None
         if not payload:
             if request.path.startswith("/api/"):
                 raise web.HTTPUnauthorized(reason="Not authenticated")
@@ -1291,8 +1302,11 @@ def _page(body: str, title: str = "Drive") -> web.Response:
 
 async def handle_login(request: web.Request) -> web.Response:
     tok = request.cookies.get("session")
-    if tok and _verify(tok):
-        raise web.HTTPFound("/drives")
+    p = _verify(tok) if tok else None
+    if p:
+        db_check: Database = request.app["db"]
+        if await db_check.get_webui_session_version() == p.get("ver", 0):
+            raise web.HTTPFound("/drives")
 
     # Capture ?next= param for post-login redirect
     next_url = request.rel_url.query.get("next", "")
@@ -1317,7 +1331,9 @@ async def handle_login(request: web.Request) -> web.Response:
                 error = "No Telegram user found. Send /start to the bot first."
             else:
                 resp = web.HTTPFound(next_url)
-                resp.set_cookie("session", _make_token(uid), max_age=86400*7, httponly=True, samesite="Lax")
+                ver = await db.get_webui_session_version()
+                resp.set_cookie("session", _make_token(uid, ver),
+                                 max_age=SESSION_TTL, httponly=True, samesite="Lax")
                 raise resp
         else:
             error = "Incorrect username or password."

@@ -357,7 +357,11 @@ class Database:
     async def set_webui_credentials(
         self, hashed_username: str, hashed_password: str, user_id: int = None
     ):
-        """Store hashed WebUI username and password (and optionally the owner's Telegram user_id)."""
+        """Store hashed WebUI username and password (and optionally the owner's Telegram user_id).
+
+        Bumps `session_version` so any WebUI session cookie issued before this
+        change is rejected by require_auth() on its next request, even though
+        the cookie's own signature/expiry are still technically valid."""
         update_fields = {
             "hashed_username": hashed_username,
             "hashed_password": hashed_password,
@@ -367,7 +371,7 @@ class Database:
             update_fields["user_id"] = user_id
         await self.db.settings.update_one(
             {"key": "webui_credentials"},
-            {"$set": update_fields},
+            {"$set": update_fields, "$inc": {"session_version": 1}},
             upsert=True,
         )
 
@@ -382,6 +386,17 @@ class Database:
         """Return True if credentials have been configured."""
         u, p = await self.get_webui_credentials()
         return u is not None and p is not None
+
+    async def get_webui_session_version(self) -> int:
+        """Current session_version for the WebUI credentials doc.
+
+        Returns -1 if no credentials doc exists at all (cleared, or never
+        set) so that any previously-issued token — which always carries a
+        non-negative `ver` — is automatically treated as stale."""
+        doc = await self.db.settings.find_one({"key": "webui_credentials"})
+        if not doc:
+            return -1
+        return doc.get("session_version", 0)
 
     async def clear_webui_credentials(self):
         """Remove WebUI credentials entirely, disabling login."""
