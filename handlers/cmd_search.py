@@ -8,7 +8,6 @@ from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 
-# ── helpers ────────────────────────────────────────────────────────────────────
 
 def _fmt(size) -> str:
     try:
@@ -52,7 +51,6 @@ async def _search_files(client, user_id: int, query: str, drive_index: int) -> l
     return await _run_sync(_call)
 
 
-# ── search command ─────────────────────────────────────────────────────────────
 
 async def _do_search(client: Client, user_id: int, query: str, status_msg: Message):
     """Run search across all drives and edit status_msg with results."""
@@ -63,9 +61,8 @@ async def _do_search(client: Client, user_id: int, query: str, status_msg: Messa
         await status_msg.edit_text("❌ No drives connected. Use /drives.")
         return
 
-    all_results: list[tuple[int, dict]] = []   # (drive_idx, file_dict)
+    all_results: list[tuple[int, dict]] = []
 
-    # Search all drives concurrently instead of one by one
     async def _search_one(i):
         try:
             return i, await _search_files(client, user_id, query, i)
@@ -92,7 +89,6 @@ async def _do_search(client: Client, user_id: int, query: str, status_msg: Messa
     header = f"🔍 **Search results for:** `{query}`\n_{len(all_results)} file(s) found_\n\n"
     rows   = []
 
-    # Build result rows – one line per file, button to open file UI
     for drive_idx, f in all_results:
         fid   = f["id"]
         fname = f.get("name", "Untitled")
@@ -109,9 +105,6 @@ async def _do_search(client: Client, user_id: int, query: str, status_msg: Messa
         if len(label) > 50:
             label = label[:47] + "…"
 
-        # Encode file id + drive index into callback data
-        # "sr:open:DRIVE_IDX:FILE_ID" – file id can be long so we store it
-        # in the file_manager's _fkey store via a callback that triggers lookup
         rows.append([
             InlineKeyboardButton(
                 label,
@@ -119,7 +112,6 @@ async def _do_search(client: Client, user_id: int, query: str, status_msg: Messa
             ),
         ])
 
-    # Only show up to 15 results to stay within Telegram limits
     rows = rows[:15]
     rows.append([
         InlineKeyboardButton("✖ Close", callback_data="search:close")
@@ -133,7 +125,6 @@ async def _do_search(client: Client, user_id: int, query: str, status_msg: Messa
 
 def register(app: Client):
 
-    # ── /search command ────────────────────────────────────────────────────────
     @app.on_message(filters.command("search") & filters.private)
     async def search_cmd(client: Client, message: Message):
         user_id = message.from_user.id
@@ -142,7 +133,6 @@ def register(app: Client):
             await message.reply_text("❌ Not connected. Use /drives first.")
             return
 
-        # Allow "/search query" inline or prompt if no query given
         parts = message.text.split(None, 1)
         if len(parts) < 2 or not parts[1].strip():
             await message.reply_text(
@@ -156,7 +146,6 @@ def register(app: Client):
         status = await message.reply_text(f"🔍 Searching for **{query}**...")
         await _do_search(client, user_id, query, status)
 
-    # ── search result callbacks ────────────────────────────────────────────────
     @app.on_callback_query(filters.regex(r"^sr:"))
     async def search_callback(client: Client, query: CallbackQuery):
         user_id = query.from_user.id
@@ -168,16 +157,13 @@ def register(app: Client):
             return
 
         if action == "info":
-            # sr:info:DRIVE_IDX:FILE_ID
             drive_idx = int(parts[2])
             file_id   = parts[3]
 
             await query.answer("📄 Loading file info...")
 
-            # Switch to the correct drive so file_manager credentials work
             await client.db.set_active_drive(user_id, drive_idx)
 
-            # Register the file id in file_manager's key store and show file UI
             from handlers.file_manager import _fkey, _fid, _cb, _icon as fm_icon, _fmt as fm_fmt, _is_downloadable, _file_keyboard
             from gdrive import FOLDER_MIME
 
@@ -185,7 +171,6 @@ def register(app: Client):
                 f = await client.gdrive.get_file(user_id, file_id, drive_index=drive_idx)
 
                 fk   = _fkey(file_id)
-                # parent folder key (for Back button)
                 parents = f.get("parents", [])
                 parent_id = parents[0] if parents else "root"
                 pfk  = _fkey(parent_id)

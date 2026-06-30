@@ -102,19 +102,15 @@ def register(app: Client):
         active  = mgr.is_active(user_id)
 
         if active or pending > 0:
-            # Send a queue-position message NOW and pass it into the job
-            # so _do_upload can edit it in-place when the job starts.
             position = pending + 1
             queue_msg = await message.reply_text(
                 f"⏳ **Queued** — position **#{position}**\n"
                 f"`{file_name}` will start after your current upload finishes.",
                 quote=True,
             )
-            status_msg_holder = [queue_msg]   # mutable so the closure can replace it
+            status_msg_holder = [queue_msg]
         else:
-            # No queue — send the initial "Processing" message here so it
-            # appears immediately, then pass it into the job.
-            status_msg_holder = [None]        # will be created inside _do_upload
+            status_msg_holder = [None]
 
         job = UploadJob(
             user_id   = user_id,
@@ -122,15 +118,11 @@ def register(app: Client):
             file_size = file_size,
             coro_fn   = None,
         )
-        # coro_fn needs job.job_id (assigned above via default_factory) to
-        # build a unique temp file path, so it's wired up after construction.
         job.coro_fn = lambda: _do_upload(
             client, message, user_id, username, first_name,
             file_name, file_size, status_msg_holder, job.job_id,
         )
 
-        # Attach a callback so the queue manager can update the position message
-        # when jobs ahead of this one finish.
         async def _position_cb(new_pos: int, _smh=status_msg_holder, _fn=file_name):
             msg = _smh[0]
             if msg is not None:
@@ -146,7 +138,6 @@ def register(app: Client):
 
         ok, reason = await mgr.enqueue(job)
         if not ok:
-            # Shouldn't normally happen since we checked above, but handle it
             if status_msg_holder[0]:
                 await status_msg_holder[0].edit_text(reason)
             else:
@@ -161,7 +152,7 @@ async def _do_upload(
     first_name: str | None,
     file_name: str,
     file_size: int,
-    status_msg_holder: list,   # list[Message | None] — mutable reference
+    status_msg_holder: list,
     job_id: int,
 ):
     drives     = await client.db.get_all_drives(user_id)
@@ -180,7 +171,6 @@ async def _do_upload(
     folder_display = f"`{folder_name}`" if folder_name else "Root"
     drive_display  = f"`{active_email}`"
 
-    # If a queue message exists, edit it to "Processing…"; otherwise send fresh.
     if status_msg_holder[0] is not None:
         status_msg = status_msg_holder[0]
         try:
@@ -198,14 +188,8 @@ async def _do_upload(
         )
         status_msg_holder[0] = status_msg
 
-    # Include job_id so two uploads of the same filename by the same user
-    # never share a temp path — this is what was causing the
-    # "[Errno 2] No such file or directory: '...mkv.temp'" and
-    # "[Errno 32] Broken pipe" errors when the same file was sent more than
-    # once while a previous copy was still queued/uploading.
     file_path = os.path.join(Config.TEMP_DIR, f"{user_id}_{job_id}_{file_name}")
 
-    # ── Download ───────────────────────────────────────────────────────────────
     try:
         last_update = [time.time()]
         dl_start    = [time.time()]
@@ -256,7 +240,6 @@ async def _do_upload(
         )
         return
 
-    # ── Upload ─────────────────────────────────────────────────────────────────
     try:
         upload_size    = os.path.getsize(file_path)
         last_update[0] = time.time()
@@ -371,7 +354,6 @@ async def _do_upload(
         _cleanup(file_path)
 
 
-# ── formatters ─────────────────────────────────────────────────────────────────
 
 def _fmt_size(size: int) -> str:
     if size < 1024:        return f"{size} B"

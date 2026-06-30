@@ -41,7 +41,6 @@ from pymongo import ASCENDING, DESCENDING
 
 logger = logging.getLogger(__name__)
 
-# Pyrogram client reference — injected at startup via set_bot_client()
 _bot_client = None
 
 
@@ -51,7 +50,6 @@ def set_bot_client(client):
     _bot_client = client
 
 
-# ── index bootstrap ────────────────────────────────────────────────────────────
 
 async def ensure_indexes(db: AsyncIOMotorDatabase):
     col = db.activity_logs
@@ -61,7 +59,6 @@ async def ensure_indexes(db: AsyncIOMotorDatabase):
     logger.info("activity_logs indexes ensured.")
 
 
-# ── internal helpers ───────────────────────────────────────────────────────────
 
 def _base(event: str, user_id: int, username: str | None, first_name: str | None) -> dict:
     return {
@@ -97,7 +94,6 @@ async def _send_to_log_group(text: str):
         logger.warning(f"Failed to send log to group {Config.LOG_GROUP_ID}: {e}")
 
 
-# ── public API ─────────────────────────────────────────────────────────────────
 
 async def log_user_join(
     db: AsyncIOMotorDatabase,
@@ -184,7 +180,6 @@ async def log_file_upload(
         status_line = "✅ Success"
     else:
         reason = error or "unknown error"
-        # strip "cancelled" uploads from the log group to avoid noise
         if reason == "cancelled":
             return
         status_line = f"❌ Failed — `{reason}`"
@@ -199,7 +194,6 @@ async def log_file_upload(
     await _send_to_log_group(text)
 
 
-# ── stats helpers (used by /stats command) ─────────────────────────────────────
 
 async def get_stats(db: AsyncIOMotorDatabase) -> dict:
     col = db.activity_logs

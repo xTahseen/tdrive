@@ -18,8 +18,8 @@ from database import Database
 logger = logging.getLogger(__name__)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
-PAGE_SIZE = 10        # Telegram bot file manager: 10 items per page
-WEBUI_PAGE_SIZE = 20  # WebUI infinite scroll: 20 items per fetch
+PAGE_SIZE = 10
+WEBUI_PAGE_SIZE = 20
 
 GOOGLE_EXPORT_MAP = {
     "application/vnd.google-apps.document":
@@ -34,7 +34,6 @@ GOOGLE_EXPORT_MAP = {
         ("application/zip", ".zip"),
 }
 
-# Thread pool for running blocking Google API calls off the event loop
 _executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="gdrive")
 
 
@@ -56,11 +55,8 @@ def _client_config() -> dict:
     }
 
 
-# ── Credential cache ───────────────────────────────────────────────────────────
-# Stores (creds, expire_time) keyed by (user_id, drive_index).
-# Avoids a DB round-trip + Credentials rebuild on every button press.
 _cred_cache: dict[tuple, tuple] = {}
-_CRED_TTL = 300  # seconds before we recheck (token lifetime is ~3600 s)
+_CRED_TTL = 300
 
 
 class GoogleDriveManager:
@@ -124,7 +120,6 @@ class GoogleDriveManager:
         cache_key = (user_id, drive_index)
         now = time.monotonic()
 
-        # Return cached creds if still fresh and not expired
         if cache_key in _cred_cache:
             cached_creds, cached_until = _cred_cache[cache_key]
             if now < cached_until and not cached_creds.expired:
@@ -180,7 +175,6 @@ class GoogleDriveManager:
             logger.warning(f"Could not fetch email: {e}")
             return None
 
-    # ── File / folder operations ───────────────────────────────────────────────
 
     async def list_folder(self, user_id: int, folder_id: str = "root",
                           page_token: str = None, drive_index: int = None,
@@ -317,7 +311,6 @@ class GoogleDriveManager:
                 fileId=file_id,
                 fields="id, name, mimeType, size, webContentLink"
             ).execute()
-            # Refresh token if needed so we have a valid access_token
             if creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             return {
@@ -375,8 +368,6 @@ class GoogleDriveManager:
         if folder_id:
             file_metadata["parents"] = [folder_id]
 
-        # Upload runs in executor; progress callbacks are dispatched back to the
-        # event loop so they can safely call async Telegram API methods.
         loop = asyncio.get_event_loop()
 
         def _call():
@@ -391,15 +382,6 @@ class GoogleDriveManager:
                 try:
                     status, response = request.next_chunk()
                 except (BrokenPipeError, ConnectionError, OSError, HttpError) as e:
-                    # Transient network errors (broken pipe, reset connections,
-                    # 5xx from Drive) are expected occasionally on resumable
-                    # uploads. google-api-python-client's resumable upload
-                    # tracks how many bytes were actually committed, so
-                    # calling next_chunk() again resumes from where it left
-                    # off rather than restarting the whole upload. Retrying
-                    # here (with a short backoff) is the fix recommended by
-                    # Google's own resumable-upload docs and avoids surfacing
-                    # a hard failure to the user for a one-off network blip.
                     retries += 1
                     if retries > max_retries:
                         raise
@@ -414,13 +396,11 @@ class GoogleDriveManager:
                     pct = int(status.progress() * 100)
                     if pct != last_pct:
                         last_pct = pct
-                        # Schedule the async callback on the event loop from this thread
                         asyncio.run_coroutine_threadsafe(progress_callback(pct), loop)
             return response
 
         response = await _run_sync(_call)
 
-        # Set public read permission (non-blocking)
         def _perm():
             try:
                 svc = self._service("drive", "v3", creds)
@@ -458,7 +438,6 @@ class GoogleDriveManager:
 
         def _call():
             svc = self._service("drive", "v3", creds)
-            # Get current parents first
             f = svc.files().get(fileId=file_id, fields="parents").execute()
             old_parents = ",".join(f.get("parents", []))
             return svc.files().update(
@@ -502,7 +481,6 @@ class GoogleDriveManager:
         mime_type, _ = mimetypes.guess_type(file_name)
         mime_type = mime_type or "application/octet-stream"
 
-        # Write bytes to a temp file for MediaFileUpload
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_name)[1])
         try:
             tmp.write(data)
@@ -575,11 +553,10 @@ class GoogleDriveManager:
 
         def _call():
             svc = self._service("drive", "v3", creds)
-            # Check if permission already exists
             perms = svc.permissions().list(fileId=file_id, fields="permissions(id,type,role)").execute()
             for p in perms.get("permissions", []):
                 if p.get("type") == "anyone":
-                    return True  # already public
+                    return True
             svc.permissions().create(
                 fileId=file_id,
                 body={"type": "anyone", "role": "reader"},

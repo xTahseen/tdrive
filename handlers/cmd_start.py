@@ -9,8 +9,6 @@ def register(app: Client):
     async def start_handler(client: Client, message: Message):
         user = message.from_user
 
-        # ensure_user returns the pymongo result; upserted_id is set only on
-        # a real insert (i.e. the very first /start from this user).
         result = await client.db.db.users.update_one(
             {"user_id": user.id},
             {"$setOnInsert": {

@@ -35,7 +35,7 @@ def _verify(token: str) -> dict | None:
     except Exception:
         return None
 
-SESSION_TTL = 6 * 3600  # 6 hours — both the cookie's max_age and the signed exp claim
+SESSION_TTL = 6 * 3600
 
 def _make_token(uid: int, ver: int = 0) -> str:
     return _sign({"uid": uid, "ver": ver, "exp": time.time() + SESSION_TTL})
@@ -54,10 +54,6 @@ def require_auth(handler):
         tok = request.cookies.get("session")
         payload = _verify(tok) if tok else None
         if payload:
-            # Signature + exp alone can't detect "credentials were changed or
-            # cleared since this cookie was issued" — that needs a live check
-            # against session_version, which database.py bumps on credential
-            # set/clear via /webui.
             db: Database = request.app["db"]
             current_ver = await db.get_webui_session_version()
             if payload.get("ver", 0) != current_ver:
@@ -65,7 +61,6 @@ def require_auth(handler):
         if not payload:
             if request.path.startswith("/api/"):
                 raise web.HTTPUnauthorized(reason="Not authenticated")
-            # Preserve the original URL so login can redirect back to it
             original = request.path
             if request.query_string:
                 original += "?" + request.query_string
@@ -152,7 +147,7 @@ def _get_share_preview_kind(mime: str, file_name: str = "") -> str | None:
     if "image" in mime: return "image"
     if "video" in mime: return "video"
     if "audio" in mime: return "audio"
-    if "pdf" in mime: return None  # served via inline iframe, not the JS player
+    if "pdf" in mime: return None
     if mime.startswith("text/") or "json" in mime or "javascript" in mime or "xml" in mime:
         return "text"
     ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
@@ -1284,9 +1279,9 @@ def _page(body: str, title: str = "Drive") -> web.Response:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>{title} — GDrive Bot</title>
-<link rel="icon" type="image/png" href="/static/favicon.png">
-<link rel="shortcut icon" href="/static/favicon.png">
-<link rel="apple-touch-icon" href="/static/favicon.png">
+<link rel="icon" type="image/png" href="/static/logo.png">
+<link rel="shortcut icon" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -1308,9 +1303,7 @@ async def handle_login(request: web.Request) -> web.Response:
         if await db_check.get_webui_session_version() == p.get("ver", 0):
             raise web.HTTPFound("/drives")
 
-    # Capture ?next= param for post-login redirect
     next_url = request.rel_url.query.get("next", "")
-    # Validate next_url: must be a relative path starting with /
     if not next_url or not next_url.startswith("/") or next_url.startswith("//"):
         next_url = "/drives"
 
@@ -1319,7 +1312,6 @@ async def handle_login(request: web.Request) -> web.Response:
         data = await request.post()
         username = data.get("username", "")
         password = data.get("password", "")
-        # Also read next from hidden form field
         post_next = data.get("next", "")
         if post_next and post_next.startswith("/") and not post_next.startswith("//"):
             next_url = post_next
@@ -1339,7 +1331,6 @@ async def handle_login(request: web.Request) -> web.Response:
             error = "Incorrect username or password."
 
     err_html = f'<div class="lerr">{_icon("alert",16)} {error}</div>' if error else ""
-    # Pass next_url into the form as a hidden field
     next_field = f'<input type="hidden" name="next" value="{next_url}">' if next_url and next_url != "/drives" else ""
     return _page(f"""
 <div class="lp">
@@ -1465,7 +1456,6 @@ async def handle_browser(request: web.Request) -> web.Response:
 
     max_mb = _fmt_size(Config.MAX_FILE_SIZE)
 
-    # Build auth URL for "Add account" link in the accordion
     try:
         gdrive: GoogleDriveManager = request.app["gdrive"]
         _auth_url, _flow, _state = gdrive.get_auth_url_for_web()
@@ -1475,7 +1465,6 @@ async def handle_browser(request: web.Request) -> web.Response:
     except Exception:
         _auth_url = "/drives"
 
-    # Build drives JSON for JS (only email, picture, index)
     import json as _json
     drives_js = _json.dumps([
         {"email": d.get("email", f"Drive {i+1}"), "picture": d.get("picture", ""), "index": i}
@@ -3740,8 +3729,6 @@ async def api_search(request: web.Request) -> web.Response:
 
 
 
-# ─── Share API endpoints ──────────────────────────────────────────────────────
-# URL pattern: /api/share/{type}/{id}  where type in ('file','folder')
 
 def _share_url(request, token):
     base = str(request.url.origin())
@@ -3770,18 +3757,17 @@ async def api_share_post(request: web.Request) -> web.Response:
     """POST /api/share/{type}/{id} — create or update a share link."""
     import secrets, hashlib
     uid   = request["uid"]
-    ftype = request.match_info["type"]   # 'file' or 'folder'
+    ftype = request.match_info["type"]
     fid   = request.match_info["id"]
     body  = await request.json()
     enabled = body.get("enabled", True)
-    pw    = body.get("password", None)  # None = leave unchanged; "" = clear; str = set
+    pw    = body.get("password", None)
     di    = int(body.get("drive", 0))
 
     db:     Database             = request.app["db"]
     gdrive: GoogleDriveManager   = request.app["gdrive"]
 
     if not enabled:
-        # Disable — remove link and revoke GDrive permission
         links = await db.get_share_links_for_file(fid)
         for doc in links:
             await db.delete_share_link(doc["token"])
@@ -3791,13 +3777,11 @@ async def api_share_post(request: web.Request) -> web.Response:
             logger.warning(f"Could not remove GDrive permission: {e}")
         return web.json_response({"active": False})
 
-    # Check existing link
     existing = await db.get_share_links_for_file(fid)
     pw_hash = hashlib.sha256(pw.encode()).hexdigest() if pw else None
 
     if existing:
         doc = existing[0]
-        # Update password if provided
         if pw is not None:
             await db.db.share_links.update_one(
                 {"token": doc["token"]},
@@ -3812,7 +3796,6 @@ async def api_share_post(request: web.Request) -> web.Response:
             "url": _share_url(request, token),
         })
 
-    # Create new
     try:
         meta = await gdrive.get_file(uid, fid, di)
     except Exception:
@@ -3871,12 +3854,8 @@ async def api_list_shares(request: web.Request) -> web.Response:
     return web.json_response({"file_ids": file_ids})
 
 
-# ─── Public share page ────────────────────────────────────────────────────────
 
 def _share_base_url():
-    # Reuse the WEBUI_BASE_URL convention used elsewhere in the bot, but
-    # strip any path it might already carry (it may be set to something
-    # like "https://host/drives").
     raw = Config.WEBUI_BASE_URL or ""
     if raw:
         for cut in ("/drives", "/drive", "/files"):
@@ -3921,9 +3900,9 @@ def _share_page(body, title="Shared", description=None, og_url=""):
         "<meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
         f"<title>{title} — Google Drive VIP</title>"
-        "<link rel='icon' type='image/png' href='/static/favicon.png'>"
-        "<link rel='shortcut icon' href='/static/favicon.png'>"
-        "<link rel='apple-touch-icon' href='/static/favicon.png'>"
+        "<link rel='icon' type='image/png' href='/static/logo.png'>"
+        "<link rel='shortcut icon' href='/static/logo.png'>"
+        "<link rel='apple-touch-icon' href='/static/logo.png'>"
         f"{og}"
         "<link rel='preconnect' href='https://fonts.googleapis.com'>"
         "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
@@ -3982,7 +3961,6 @@ async def _share_validate_child(gdrive: GoogleDriveManager, uid: int, di: int, f
     except Exception:
         return None
 
-    # Walk up the parent chain (max 20 levels to avoid infinite loops)
     current_id = fid
     for _ in range(20):
         try:
@@ -3991,10 +3969,10 @@ async def _share_validate_child(gdrive: GoogleDriveManager, uid: int, di: int, f
             return None
         parents = node.get("parents") or []
         if folder_id in parents:
-            return meta          # shared root is an ancestor — file is valid
+            return meta
         if not parents:
-            return None          # reached drive root without finding shared folder
-        current_id = parents[0]  # Google Drive files have exactly one parent
+            return None
+        current_id = parents[0]
     return None
 
 async def _share_crumb_chain(gdrive: GoogleDriveManager, uid: int, di: int, root_id: str, target_id: str) -> list:
@@ -4016,7 +3994,7 @@ async def _share_crumb_chain(gdrive: GoogleDriveManager, uid: int, di: int, root
             chain.reverse()
             return chain
         if not parents:
-            return []  # reached drive root without finding the shared folder
+            return []
         current_id = parents[0]
     return []
 
@@ -4382,9 +4360,9 @@ document.addEventListener('DOMContentLoaded',function(){{
         "<meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
         f"<title>{title} — Google Drive VIP</title>"
-        "<link rel='icon' type='image/png' href='/static/favicon.png'>"
-        "<link rel='shortcut icon' href='/static/favicon.png'>"
-        "<link rel='apple-touch-icon' href='/static/favicon.png'>"
+        "<link rel='icon' type='image/png' href='/static/logo.png'>"
+        "<link rel='shortcut icon' href='/static/logo.png'>"
+        "<link rel='apple-touch-icon' href='/static/logo.png'>"
         f"{_og_meta_tags(title, _PLAYER_OG_DESC, url_path=f'/s/{token}')}"
         "<link rel='preconnect' href='https://fonts.googleapis.com'>"
         "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
@@ -4419,11 +4397,10 @@ async def handle_share_view(request: web.Request) -> web.Response:
     mime     = doc.get("mime_type", "")
 
     if is_folder:
-        # Support navigating into subfolders via ?sub=<google_drive_folder_id>
         sub_param = request.rel_url.query.get("sub", "")
         current_folder_id = file_id
         current_name = file_name
-        init_chain = []  # full ancestor chain (root excluded) for breadcrumb bootstrap
+        init_chain = []
         if sub_param:
             try:
                 init_chain = await _share_crumb_chain(gdrive, uid, di, file_id, sub_param)
@@ -4434,7 +4411,6 @@ async def handle_share_view(request: web.Request) -> web.Response:
             current_name = init_chain[-1]["name"]
             current_folder_id = sub_param
 
-        # Render folder listing — AJAX-powered single-page navigation
         import json as _json
 
         ic_folder_b64 = _icon("folder", 28, "", "#0386c3").replace("`", "\\`").replace("\\", "\\\\")
@@ -4443,19 +4419,15 @@ async def handle_share_view(request: web.Request) -> web.Response:
         ic_file_b64   = _icon("file",  28, "", "#607d8b").replace("`", "\\`").replace("\\", "\\\\")
 
         body = (
-            # Progress bar
             '<div id="bar"></div>'
             '<div class="spub-browse" id="spub-root">'
-            # Header (static, always visible)
             '<div id="spub-header" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
             f'<div class="fi-icon" id="spub-folder-ico">{_icon("folder", 28, "", "#0386c3")}</div>'
             '<div>'
             f'<div style="font-size:18px;font-weight:700" id="spub-title">{file_name}</div>'
             '<div style="font-size:12px;color:var(--text3)">Shared folder · view only</div>'
             '</div></div>'
-            # Breadcrumb trail — hidden at root, shown once inside a subfolder
             '<div id="spub-back" style="display:none;align-items:center;gap:6px;overflow-x:auto;margin-bottom:10px;font-size:13px;color:var(--text2)"></div>'
-            # File list container (animated)
             '<div id="spub-list-wrap" style="border:1px solid var(--border);border-radius:var(--r12);overflow:hidden;transition:opacity .18s ease">'
             '<div id="spub-list"></div>'
             '</div>'
@@ -4464,17 +4436,11 @@ async def handle_share_view(request: web.Request) -> web.Response:
             f'var _tok={_json.dumps(token)};'
             f'var _rootId={_json.dumps(file_id)};'
             f'var _rootName={_json.dumps(file_name)};'
-            # Stack of {{id, name}} for breadcrumb
             'var _stack=[];'
-            # Skeleton HTML helper
             'var _skelItem=\'<div class="sri"><div class="sri-icon"><div class="sk" style="width:32px;height:32px;border-radius:6px"></div></div><div class="sri-info"><div class="sk sk-n" style="margin-bottom:6px"></div><div class="sk sk-s"></div></div></div>\';'
-            # Progress bar
             'function _bar(on){var b=document.getElementById("bar");b.className=on?"on":"done";if(!on)setTimeout(()=>b.className="",800);}'
-            # Format size
             'function _sz(b){if(!b)return"";b=parseInt(b);if(b<1048576)return(b>>10)+" KB";if(b<1073741824)return(b>>20)+" MB";return(b>>30)+" GB";}'
-            # Render file-type icons inline (simple emoji/SVG fallback)
             f'var _IC={{folder:`{ic_folder_b64}`,back:`{ic_back_b64}`,dl:`{ic_dl_b64}`,file:`{ic_file_b64}`}};'
-            # Navigate into a subfolder or back to root
             'async function _nav(id,name,pushState){'
             '  var wrap=document.getElementById("spub-list-wrap");'
             '  _bar(true);'
@@ -4574,8 +4540,6 @@ async def handle_share_view(request: web.Request) -> web.Response:
             og_url=f"/s/{token}",
         )
 
-    # File — previewable types open straight into the in-page player;
-    # everything else shows a download card.
     preview_kind = _get_share_preview_kind(mime, file_name)
     if preview_kind:
         return _build_share_player_page(
@@ -4636,7 +4600,6 @@ async def handle_share_folder_file_view(request: web.Request) -> web.Response:
     if not meta:
         raise web.HTTPNotFound()
 
-    # List siblings from the actual current folder (subfolder if ?sub= was passed)
     current_folder_id = sub_param if sub_param else folder_id
     try:
         siblings = await gdrive.list_folder_contents(uid, current_folder_id, di)
@@ -4832,7 +4795,6 @@ async def handle_share_ls(request: web.Request) -> web.Response:
     sub_param = request.rel_url.query.get("sub", "").strip()
     target_id = sub_param if sub_param else root_id
 
-    # Security: verify target_id is accessible from the share root
     if target_id != root_id:
         meta = await _share_validate_child(gdrive, uid, di, root_id, target_id)
         if not meta:
@@ -4848,7 +4810,6 @@ async def handle_share_ls(request: web.Request) -> web.Response:
         item_mime = item.get("mimeType", "")
         is_fol    = "folder" in item_mime
         preview_kind = _get_share_preview_kind(item_mime, item.get("name", "")) if not is_fol else None
-        # Build a small inline SVG/HTML icon string for each item
         if is_fol:
             ico_html = _icon("folder", 28, "", "#0386c3")
         else:
@@ -4864,7 +4825,6 @@ async def handle_share_ls(request: web.Request) -> web.Response:
             "thumbnailLink": item.get("thumbnailLink", ""),
         })
 
-    # Folders first, then alphabetical
     result.sort(key=lambda x: (0 if x["isFolder"] else 1, x["name"].lower()))
     return web.Response(
         content_type="application/json",
@@ -4899,8 +4859,6 @@ def create_app(db: Database, gdrive: GoogleDriveManager, bot=None) -> web.Applic
     app.router.add_post("/api/upload",           api_upload)
     app.router.add_get("/api/search",            api_search)
     app.router.add_get("/api/storage",           api_storage)
-    # Share link routes
-    # Share link routes
     app.router.add_get("/api/share/{type}/{id}",    api_share_get)
     app.router.add_post("/api/share/{type}/{id}",   api_share_post)
     app.router.add_delete("/api/share/{type}/{id}", api_share_delete)

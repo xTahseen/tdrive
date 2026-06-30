@@ -47,7 +47,6 @@ async def _build_storage_text(client, user_id: int) -> str:
     active_idx = await client.db.get_active_drive_index(user_id)
     lines = ["☁️ **Google Drive Storage**\n"]
 
-    # Fetch all drive storage info concurrently
     import asyncio as _asyncio
     about_results = await _asyncio.gather(*[_fetch_about(client, user_id, i) for i in range(len(drives))])
 

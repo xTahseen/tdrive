@@ -6,12 +6,8 @@ from pymongo import ASCENDING
 
 logger = logging.getLogger(__name__)
 
-# ── Simple in-process user-doc cache ──────────────────────────────────────────
-# Keyed by user_id → (doc, expire_monotonic).
-# TTL is short (10 s) so mutations (token save, drive switch) are reflected quickly
-# while still eliminating the multiple redundant find_one calls per button press.
 _doc_cache: dict[int, tuple[dict, float]] = {}
-_DOC_TTL = 10.0  # seconds
+_DOC_TTL = 10.0
 
 
 def _cache_get(user_id: int) -> dict | None:
@@ -39,8 +35,8 @@ class Database:
     async def connect(self):
         self.client = AsyncIOMotorClient(
             self.uri,
-            maxPoolSize=50,          # allow up to 50 concurrent DB connections
-            minPoolSize=5,           # keep 5 warm
+            maxPoolSize=50,
+            minPoolSize=5,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
         )
@@ -60,7 +56,6 @@ class Database:
         if self.client:
             self.client.close()
 
-    # ── internal: fetch user doc (with cache) ─────────────────────────────────
 
     async def _get_doc(self, user_id: int) -> dict | None:
         cached = _cache_get(user_id)
@@ -74,7 +69,6 @@ class Database:
     async def _invalidate(self, user_id: int):
         _cache_del(user_id)
 
-    # ── token / drive storage ──────────────────────────────────────────────────
 
     async def save_token(self, user_id: int, token_data: dict, account_index: int = None):
         doc = await self._get_doc(user_id)
@@ -84,12 +78,10 @@ class Database:
         token_data_clean = dict(token_data)
 
         if account_index is not None and 0 <= account_index < len(drives):
-            # Explicit index update (e.g. token refresh)
             drives[account_index]["token"] = token_data_clean
             if email:
                 drives[account_index]["email"] = email
         else:
-            # Check if this email already exists — replace it instead of adding a duplicate
             existing_index = None
             if email:
                 for i, d in enumerate(drives):
@@ -212,7 +204,6 @@ class Database:
             for d in drives
         ]
 
-    # ── active drive ───────────────────────────────────────────────────────────
 
     async def get_active_drive_index(self, user_id: int) -> int:
         doc = await self._get_doc(user_id)
@@ -225,7 +216,6 @@ class Database:
         )
         await self._invalidate(user_id)
 
-    # ── token updates ──────────────────────────────────────────────────────────
 
     async def update_drive_token(self, user_id: int, drive_index: int, token_data: dict):
         doc = await self._get_doc(user_id)
@@ -253,7 +243,6 @@ class Database:
             )
             await self._invalidate(user_id)
 
-    # ── default folder ─────────────────────────────────────────────────────────
 
     async def set_default_folder(self, user_id: int, drive_index: int,
                                   folder_id: str | None, folder_name: str | None):
@@ -284,7 +273,6 @@ class Database:
         d = drives[active]
         return d.get("default_folder_id"), d.get("default_folder_name")
 
-    # ── user info ──────────────────────────────────────────────────────────────
 
     async def save_user_email(self, user_id: int, email: str):
         await self.db.users.update_one(
@@ -300,7 +288,6 @@ class Database:
             {"_id": 0, "google_email": 1, "created_at": 1},
         )
 
-    # ── oauth state ────────────────────────────────────────────────────────────
 
     async def save_oauth_state(self, user_id: int, state: str):
         await self.db.oauth_states.update_one(
@@ -322,7 +309,6 @@ class Database:
     async def delete_oauth_state(self, user_id: int):
         await self.db.oauth_states.delete_one({"user_id": user_id})
 
-    # ── migration helper ───────────────────────────────────────────────────────
 
     async def migrate_legacy_tokens(self):
         cursor = self.db.users.find({"token": {"$exists": True}})
@@ -352,7 +338,6 @@ class Database:
         if count:
             logger.info(f"migrate_legacy_tokens: fixed {count} document(s).")
 
-    # ── WebUI credentials (username + password) ────────────────────────────────
 
     async def set_webui_credentials(
         self, hashed_username: str, hashed_password: str, user_id: int = None
@@ -423,7 +408,6 @@ class Database:
             ids.append(doc["user_id"])
         return ids
 
-    # ── Share links ────────────────────────────────────────────────────────────
 
     async def create_share_link(
         self,

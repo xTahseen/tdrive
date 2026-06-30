@@ -35,20 +35,13 @@ class Config:
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(2 * 1024 * 1024 * 1024)))
     TEMP_DIR: str = os.getenv("TEMP_DIR", "./downloads")
 
-    # ── Admin ──────────────────────────────────────────────────────────────────
-    # Comma-separated Telegram user IDs that may use /stats
-    # e.g.  ADMIN_IDS=123456789,987654321
     ADMIN_IDS: list[int] = _parse_int_list(os.getenv("ADMIN_IDS", ""))
 
-    # Telegram group/channel ID where all activity logs are sent
-    # Use a negative ID for groups/channels, e.g. LOG_GROUP_ID=-1001234567890
     LOG_GROUP_ID: int | None = int(os.getenv("LOG_GROUP_ID", "0")) or None
 
-    # ── Upload queue ───────────────────────────────────────────────────────────
     UPLOAD_WORKERS: int = int(os.getenv("UPLOAD_WORKERS", "4"))
     UPLOAD_QUEUE_PER_USER: int = int(os.getenv("UPLOAD_QUEUE_PER_USER", "5"))
 
-    # ── WebUI settings ─────────────────────────────────────────────────────────
     WEBUI_ENABLED: bool = os.getenv("WEBUI_ENABLED", "false").lower() in ("1", "true", "yes")
     WEBUI_HOST: str = os.getenv("WEBUI_HOST", "0.0.0.0")
     WEBUI_PORT: int = int(os.getenv("WEBUI_PORT", "8080"))

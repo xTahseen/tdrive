@@ -69,10 +69,8 @@ async def main():
     logger.info("Starting bot…")
     await app.start()
 
-    # Give logger the live client so it can send to the log group
     set_bot_client(app)
 
-    # Public command list — /stats intentionally excluded (admin-only, hidden)
     commands = [
         BotCommand("start",   "Start the bot"),
         BotCommand("drives",  "Manage Drive accounts & connect new ones"),

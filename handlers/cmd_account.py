@@ -15,7 +15,6 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
-# Tracks per-user state: {"step": "username"|"password", "username": str, "prompt_msg_id": int}
 _pending: dict[int, dict] = {}
 
 
@@ -59,13 +58,11 @@ async def _show_main(client, target, user_id: int, edit: bool = False):
 
 def register(app: Client):
 
-    # ── /webui command ─────────────────────────────────────────────────────────
     @app.on_message(filters.command("webui") & filters.private)
     async def webui_handler(client: Client, message: Message):
         _pending.pop(message.from_user.id, None)
         await _show_main(client, message, message.from_user.id, edit=False)
 
-    # ── Inline button callbacks ────────────────────────────────────────────────
     @app.on_callback_query(filters.regex(r"^webui:"))
     async def webui_callback(client: Client, query: CallbackQuery):
         user_id = query.from_user.id
@@ -109,7 +106,6 @@ def register(app: Client):
             await query.answer()
             await _show_main(client, query.message, user_id, edit=True)
 
-    # ── Text input listener ────────────────────────────────────────────────────
     @app.on_message(
         filters.private & filters.text
         & ~filters.command(["start", "logout", "help", "drives", "storage", "search", "webui"]),
@@ -123,7 +119,6 @@ def register(app: Client):
 
         text = message.text.strip()
 
-        # ── Waiting for username ───────────────────────────────────────────────
         if state["step"] == "username":
             if len(text) < 3:
                 await message.reply_text(
@@ -144,7 +139,6 @@ def register(app: Client):
                 ),
             )
 
-        # ── Waiting for password ───────────────────────────────────────────────
         elif state["step"] == "password":
             if len(text) < 6:
                 await message.reply_text(

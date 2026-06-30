@@ -3,7 +3,6 @@ import logging
 import os
 import tempfile
 
-# Tracks active drive→telegram download tasks per user
 _active_dl_tasks: dict[int, asyncio.Task] = {}
 
 from pyrogram import Client, filters
@@ -72,8 +71,6 @@ def _parse_fk(raw: str) -> int:
 
 _pending_input: dict[int, dict] = {}
 
-# Pagination history: user_id -> folder_id -> [token_stack]
-# Stack holds tokens visited: [None, "tok2", "tok3"] means page 3, prev="tok2"
 _page_history: dict[int, dict] = {}
 
 
@@ -151,7 +148,6 @@ async def _build_browser(client, user_id: int, folder_id: str, page_token: str =
     pk = _fkey(parent_id)
     rows = []
 
-    # ── Top action row ───────────────────────────────────────────────────
     if folder_id == "root":
         rows.append([InlineKeyboardButton("➕ New Folder", callback_data=_cb("fm", "new_folder", fk))])
     else:
@@ -168,7 +164,6 @@ async def _build_browser(client, user_id: int, folder_id: str, page_token: str =
             )
         rows.append(folder_actions)
 
-    # ── File / folder list ───────────────────────────────────────────────
     for item in items:
         icon = _icon(item)
         name = item["name"]
@@ -186,8 +181,6 @@ async def _build_browser(client, user_id: int, folder_id: str, page_token: str =
         else:
             rows.append([InlineKeyboardButton(label, callback_data=_cb("fm", "file", ik, fk))])
 
-    # ── Pagination row ───────────────────────────────────────────────────
-    # Check history stack to decide whether Prev is available
     history = _page_history.get(user_id, {}).get(folder_id, [None])
     on_first_page = len(history) <= 1
 
@@ -200,7 +193,6 @@ async def _build_browser(client, user_id: int, folder_id: str, page_token: str =
     if nav_row:
         rows.append(nav_row)
 
-    # ── Bottom nav ───────────────────────────────────────────────────────
     if folder_id != "root":
         rows.append([InlineKeyboardButton("« Back", callback_data=_cb("fm", "browse", pk, 0))])
 
@@ -235,7 +227,6 @@ async def open_file_manager(client: Client, message: Message, user_id: int):
         return
     wait = await message.reply_text("📂 Opening File Manager...")
     try:
-        # Reset pagination history for this user on fresh open
         if user_id not in _page_history:
             _page_history[user_id] = {}
         _page_history[user_id]["root"] = [None]
@@ -262,7 +253,6 @@ def register(app: Client):
             fk  = _parse_fk(parts[2]) if len(parts) > 2 else 0
             folder_id = _fid(fk)
             await query.answer()
-            # Reset pagination history when navigating to a folder fresh
             if user_id not in _page_history:
                 _page_history[user_id] = {}
             _page_history[user_id][folder_id] = [None]
@@ -274,7 +264,6 @@ def register(app: Client):
                 await query.answer("❌ Failed to load folder.", show_alert=True)
 
         elif action == "pg_next":
-            # Next page: push the new token onto the history stack
             fk  = _parse_fk(parts[2]) if len(parts) > 2 else 0
             ntk = _parse_fk(parts[3]) if len(parts) > 3 else 0
             folder_id  = _fid(fk)
@@ -292,14 +281,13 @@ def register(app: Client):
                 await query.answer("❌ Failed to load next page.", show_alert=True)
 
         elif action == "pg_prev":
-            # Prev page: pop the stack, use the new last element as page_token
             fk = _parse_fk(parts[2]) if len(parts) > 2 else 0
             folder_id = _fid(fk)
             await query.answer()
             stack = _page_history.get(user_id, {}).get(folder_id, [None])
             if len(stack) > 1:
-                stack.pop()  # remove current page token
-            page_token = stack[-1]  # previous page token (None = page 1)
+                stack.pop()
+            page_token = stack[-1]
             try:
                 text, keyboard = await _build_browser(client, user_id, folder_id, page_token=page_token)
                 await query.message.edit_text(text, reply_markup=keyboard)
@@ -335,7 +323,6 @@ def register(app: Client):
                 await query.answer("❌ Failed to get file info.", show_alert=True)
 
         elif action == "dl:cancel":
-            # Cancel an active drive→telegram download
             task = _active_dl_tasks.get(user_id)
             if task and not task.done():
                 task.cancel()

@@ -35,8 +35,6 @@ from logger import log_user_block, log_user_unblock
 
 logger = logging.getLogger(__name__)
 
-# In-process set of user_ids currently known to have blocked the bot.
-# Populated at runtime; does not persist across restarts (DB is source of truth).
 _blocked_users: set[int] = set()
 
 
